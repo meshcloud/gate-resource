@@ -7,6 +7,7 @@ exec 3>&1 # make stdout available as fd 3 for the result
 exec 1>&2 # redirect all output to stderr for logging
 
 source=$1
+autoclose_cmd=$(dirname $0)/autoclose.sh
 
 if [ -z "$source" ]; then
   echo "usage: $0 <path/to/source>"
@@ -25,21 +26,21 @@ gate_repository=$(jq -r '.params.gate_repository // ""' < $payload)
 gate=$(jq -r '.params.gate // "'$source_gate'"' < $payload) 
 passed_file=$(jq -r '.params.passed_file // ""' < $payload)
 
-
 cd $source
 
 # dervice passed value, note that passed_file may contain wildcards
-passed=$(basename $passed_file)
+item=$(basename $passed_file)
 
 # write gate status
 mkdir -p $gate_repository/$gate                    # ensure gate-directory exists
-$(cp $passed_file "$gate_repository/$gate/$passed")     # passed_file should be interpolated, so we run it in a subshell
+$(cp $passed_file "$gate_repository/$gate/$item")     # passed_file should be interpolated, so we run it in a subshell
 
 git -C $gate_repository add .
+git -C $gate_repository status
 git -C $gate_repository commit -m "pass gate"
 
 # extract git configuration and pass it to git resource
-# note: we will need to replace this with our own push logic to correctly handle auto-gates
+# note: we will need to replace this with our own push logic to correctly handle autoclose gates
 
 git_source=$(cat "$payload" | jq -r .source.git)
 git_payload=$(jq -n "{
@@ -50,12 +51,24 @@ git_payload=$(jq -n "{
   }
 }")
 
-# forward to git-resource to let it p
-git_out=$(echo "$git_payload" | /opt/git-resource/out $source)
+$autoclose_cmd "$gate_repository"
+# todo: commit autocloses
+
+
+# forward to git-resource to let it push
+echo "$git_payload" | /opt/git-resource/out $source
+
+# determine operation to emit. It's not possible yet to emit completed autoclose gates
+# from the same resource
+operation="passed"
+if [[ $item == *.autoclose ]]; then
+  operation="updated"
+fi
+
 
 jq -n "{
   version: {
     gate: \"$gate\",
-    passed: \"$passed\"
+    \"$operation\": \"$item\"
   }
 }" >&3

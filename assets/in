@@ -21,8 +21,16 @@ cat > $payload <&0
 
 # parse parameters
 version=$(jq -r '.version' < $payload)
-gate=$(jq -r '.version.gate // ""' < $payload)
 passed=$(jq -r '.version.passed // ""' < $payload)
+
+if [ -z "$passed" ]; then
+  echo "gate did not pass, nothing to fetch (did you just put?)"
+  jq -n "{
+    version: $version,
+    metadata: []
+  }" >&3  
+  exit 0
+fi
 
 # extract git configuration and pass it to git resource
 git_source=$(cat "$payload" | jq -r .source.git)
