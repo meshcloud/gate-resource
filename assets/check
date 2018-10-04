@@ -9,9 +9,21 @@ exec 1>&2 # redirect all output to stderr for logging
 payload=$TMPDIR/gate-resource-request
 cat > $payload <&0
 
+gate=$(jq -r '.source.gate // ""' < $payload)
+
 # extract git configuration and pass it to git resource
 git_source=$(cat "$payload" | jq -r .source.git)
 git_payload=$(echo '{ "source": '$git_source' }' | jq -r)
+git_payload=$(echo "$git_payload" | jq -r '.source.paths = ["'$gate'"]') # only watch the gate path
 
-# forward to git-resource
-echo "$git_payload" | /opt/git-resource/check $@
+# forward to git-resource to let it do its checking
+git_refs=$(echo "$git_payload" | /opt/git-resource/check $@)
+latest_ref=$(echo "$git_refs" | jq -r ".[0].ref")
+
+destination=$TMPDIR/git-resource-repo-cache
+cd $destination
+
+# for now, only emit the latest value that passed the gate
+passed_file=$(git diff-tree --no-commit-id --name-only -r $latest_ref | grep $gate)
+passed_value=$(basename $passed_file)
+echo '[{ "gate": "'$gate'", "passed": "'$passed_value'" }]' | jq -r >&3

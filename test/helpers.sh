@@ -54,12 +54,16 @@ init_repo() {
   )
 }
 
-check_uri() {
+check_gate() {
+  local repo=$1
+  local gate=$2
+
   jq -n "{
     source: {
       git: {
-        uri: $(echo $1 | jq -R .)
-      }
+        uri: $(echo $repo | jq -R .)
+      },
+      gate: $(echo $gate | jq -R .)
     }
   }" | ${resource_dir}/check | tee /dev/stderr
 }
@@ -78,6 +82,8 @@ make_commit_to_file_on_branch() {
   # switch to branch
   git -C $repo checkout -q $branch
 
+  # ensure dir exists
+  mkdir -p "$(dirname $repo/$file)"
   # modify file and commit
   echo x >> $repo/$file
   git -C $repo add $file
