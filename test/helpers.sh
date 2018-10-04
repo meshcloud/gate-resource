@@ -116,11 +116,35 @@ get_gate_at_ref() {
 
   jq -n "{
     source: {
-      uri: $(echo $uri | jq -R .)
+      git: {
+        uri: $(echo $uri | jq -R .)
+      }
     },
     version: {
       gate: $(echo $gate | jq -R .),
       passed: $(echo $passed | jq -R .)
     }
   }" | ${resource_dir}/in "$destination" | tee /dev/stderr
+}
+
+put_gate() {
+  local uri="$1"
+  local source="$2"
+  local gate="$3"
+  local passed_file="$4"
+  local repo="$5"
+
+  jq -n "{
+    source: {
+      git: {
+        uri: $(echo $uri | jq -R .),
+        branch: \"master\"
+      }
+    },
+    params: {
+      gate: $(echo $gate | jq -R .),
+      gate_repository: $(echo $repo | jq -R .),
+      passed_file: $(echo $passed_file | jq -R .)
+    }
+  }" | ${resource_dir}/out "$source" | tee /dev/stderr
 }

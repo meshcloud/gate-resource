@@ -24,13 +24,18 @@ version=$(jq -r '.version' < $payload)
 gate=$(jq -r '.version.gate // ""' < $payload)
 passed=$(jq -r '.version.passed // ""' < $payload)
 
-# write gate and passed files
-mkdir -p $destination
-echo "$gate" > $destination/gate
-echo "$passed" > $destination/passed
+# extract git configuration and pass it to git resource
+git_source=$(cat "$payload" | jq -r .source.git)
+git_payload=$(echo '{ "source": '$git_source' }' | jq -r)
 
-metadata="[]"
+# forward to git-resource to let it fetch the repository, we always fetch at HEAD
+git_out=$(echo "$git_payload" | /opt/git-resource/in $destination)
+git_meta=$(echo $git_out | jq -r .metadata)
+
+# write passed file
+echo "$passed" > $destination/.git/gate_passed
+
 jq -n "{
   version: $version,
-  metadata: $metadata
+  metadata: $git_meta
 }" >&3

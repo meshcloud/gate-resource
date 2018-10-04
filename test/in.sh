@@ -12,8 +12,7 @@ it_can_get_from_version() {
 
   get_gate_at_ref "$repo" $gate $passed "$dest"
 
-  test $(cat $dest/gate) = "$gate"
-  test $(cat $dest/passed) = "$passed"
+  test $(cat $dest/.git/gate_passed) = "$passed"
 }
 
 run it_can_get_from_version
