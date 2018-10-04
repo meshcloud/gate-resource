@@ -1,0 +1,17 @@
+#!/bin/bash
+# vim: set ft=sh
+
+set -e
+
+exec 3>&1 # make stdout available as fd 3 for the result
+exec 1>&2 # redirect all output to stderr for logging
+
+payload=$TMPDIR/gate-resource-request
+cat > $payload <&0
+
+# extract git configuration and pass it to git resource
+git_source=$(cat "$payload" | jq -r .source.git)
+git_payload=$(echo '{ "source": '$git_source' }' | jq -r)
+
+# forward to git-resource
+echo "$git_payload" | /opt/git-resource/check $@
