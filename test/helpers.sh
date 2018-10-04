@@ -107,3 +107,20 @@ make_commit_to_branch() {
 make_commit() {
   make_commit_to_file $1 some-file "${2:-}"
 }
+
+get_gate_at_ref() {
+  local uri="$1"
+  local gate="$2"
+  local passed="$3"
+  local destination="$4"
+
+  jq -n "{
+    source: {
+      uri: $(echo $uri | jq -R .)
+    },
+    version: {
+      gate: $(echo $gate | jq -R .),
+      passed: $(echo $passed | jq -R .)
+    }
+  }" | ${resource_dir}/in "$destination" | tee /dev/stderr
+}
