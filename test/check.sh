@@ -15,7 +15,26 @@ it_can_check_from_head() {
   '
 }
 
+it_can_check_empty_repo() {
+  local repo=$(init_repo)
+  
+  check_gate $repo "my-gate" | jq -e '
+    . == []
+  '
+}
+
+it_can_check_empty_gate() {
+  local repo=$(init_repo)
+  local ref=$(make_commit $repo)
+
+  check_gate $repo "my-gate" | jq -e '
+    . == []
+  '
+}
+
 # to do: test empty commit
 # todo: test consecutive commits emmit latest only
  
 run it_can_check_from_head
+run it_can_check_empty_repo
+run it_can_check_empty_gate
