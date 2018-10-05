@@ -5,7 +5,6 @@ set -o errtrace
 set -o pipefail
 set -o nounset
 
-shopt -s globstar
 shopt -s nullglob
 
 doc() {
@@ -16,7 +15,7 @@ USAGE:
    autoclose [path]
 
 EXAMPLES:
-    autoclose /my/repository
+    autoclose gate-repository/my-autogate
 EOF
 }
 
@@ -25,7 +24,7 @@ main() {
     path="$1"
     # strip version numbers from all file names
 
-    for autoclose in $path/*/*.autoclose; do
+    for autoclose in $path/*.autoclose; do
         echo "autoclose processing: $autoclose"
         passed=true
         echo "----------------------"
@@ -45,7 +44,6 @@ main() {
           mv "$autoclose" "${autoclose//\.autoclose/}"
         fi
     done
-    
 }
 
 if [[ $# == 1 ]]; then

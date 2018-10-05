@@ -22,6 +22,7 @@ cat > $payload <&0
 # parse parameters
 version=$(jq -r '.version' < $payload)
 passed=$(jq -r '.version.passed // ""' < $payload)
+gate=$(jq -r '.version.gate // ""' < $payload)
 
 if [ -z "$passed" ]; then
   echo "gate did not pass, nothing to fetch (did you just put?)"
@@ -41,7 +42,8 @@ git_out=$(echo "$git_payload" | /opt/git-resource/in $destination)
 git_meta=$(echo $git_out | jq -r .metadata)
 
 # write passed file
-echo "$passed" > $destination/.git/gate_passed
+cp $destination/$gate/$passed $destination/metadata
+echo "$passed" > $destination/passed
 
 jq -n "{
   version: $version,

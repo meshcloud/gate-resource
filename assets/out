@@ -21,50 +21,89 @@ payload=$(mktemp $TMPDIR/gate-resource-request.XXXXXX)
 cat > $payload <&0
 
 # parse parameters
-source_gate=$(jq -r '.source.gate // ""' < $payload)
+gate=$(jq -r '.source.gate // ""' < $payload)
 gate_repository=$(jq -r '.params.gate_repository // ""' < $payload)
-gate=$(jq -r '.params.gate // "'$source_gate'"' < $payload) 
-passed_file=$(jq -r '.params.passed_file // ""' < $payload)
+item_file=$(jq -r '.params.item_file // ""' < $payload)
+update_autoclose=$(jq -r '.params.update_autoclose // ""' < $payload)
+git_config_payload=$(jq -r '.source.git.git_config // []' < $payload)
 
-cd $source
-
-# dervice passed value, note that passed_file may contain wildcards
-item=$(basename $passed_file)
-
-# write gate status
-mkdir -p $gate_repository/$gate                    # ensure gate-directory exists
-$(cp $passed_file "$gate_repository/$gate/$item")     # passed_file should be interpolated, so we run it in a subshell
-
-git -C $gate_repository add .
-git -C $gate_repository status
-git -C $gate_repository commit -m "pass gate"
-
-# extract git configuration and pass it to git resource
-# note: we will need to replace this with our own push logic to correctly handle autoclose gates
-
-git_source=$(cat "$payload" | jq -r .source.git)
-git_payload=$(jq -n "{
-  source: $git_source,
-  params: {
-    repository: $(echo $gate_repository | jq -R .),
-    rebase: true
-  }
-}")
-
-$autoclose_cmd "$gate_repository"
-# todo: commit autocloses
-
-
-# forward to git-resource to let it push
-echo "$git_payload" | /opt/git-resource/out $source
-
-# determine operation to emit. It's not possible yet to emit completed autoclose gates
-# from the same resource
-operation="passed"
-if [[ $item == *.autoclose ]]; then
-  operation="updated"
+if [[ -z "$item_file" && -z "$update_autoclose" ]]; then
+  echo "invalid payload (missing item_file or update_autoclose):" >&2
+  cat $payload >&2
+  exit 1
 fi
 
+configure_git_global() {
+  local git_config_payload="$1"
+  eval $(echo "$git_config_payload" | \
+    jq -r ".[] | \"git config --global '\\(.name)' '\\(.value)'; \"")
+}
+
+commit() {
+  local repository="$1"
+  local msg="$2"
+  git -C $repository add .
+  git -C $repository status
+  if [ -z "$(git -C $repository status --porcelain)" ]; then 
+    echo "nothing to commit - skipping"
+  else 
+    git -C $repository commit -m "$msg"
+  fi
+}
+
+cd $source
+configure_git_global "${git_config_payload}"
+
+# determine operation to emit as a resulting version
+operation="passed"
+if [ ! -z "$item_file" ]; then
+  # dervice item name, note that item_file may contain wildcards
+  item=$(basename $item_file)
+  # TODO: this check't work, but we need to revisit our version strategy anyway
+  if [[ $item == *.autoclose ]]; then
+    operation="updated"
+  fi
+
+  # write gate status
+  mkdir -p $gate_repository/$gate                 # ensure gate-directory exists
+  $(cp $item_file "$gate_repository/$gate/$item") # item_file should be interpolated, so we run it in a subshell
+
+  commit "$gate_repository" "$operation gate"
+
+  # extract git configuration and pass it to git resource
+  # note: gate item pushes may be safely rebased
+  git_source=$(cat "$payload" | jq -r .source.git)
+  git_payload=$(jq -n "{
+    source: $git_source,
+    params: {
+      repository: $(echo $gate_repository | jq -R .),
+      rebase: true
+    }
+  }")
+
+    # forward to git-resource to let it push
+  echo "$git_payload" | /opt/git-resource/out $source
+
+else
+  operation="passed"
+  # todo: autocloses must be in a separate commit each, introduce with version: every support
+  $autoclose_cmd "$gate_repository/$gate"
+  commit "$gate_repository" "processed autoclose in $gate"
+
+  # extract git configuration and pass it to git resource
+  # note: autoclose update cannot be safely rebased and need to be serialized
+  # however, we'd need a proper rebase and update loop in here to implement this.
+  git_source=$(cat "$payload" | jq -r .source.git)
+  git_payload=$(jq -n "{
+    source: $git_source,
+    params: {
+      repository: $(echo $gate_repository | jq -R .)
+    }
+  }")
+
+  # forward to git-resource to let it push
+  echo "$git_payload" | /opt/git-resource/out $source
+fi
 
 jq -n "{
   version: {

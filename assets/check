@@ -20,8 +20,6 @@ git_payload=$(echo "$git_payload" | jq -r '.source.paths = ["'$gate'"]') # only 
 git_refs=$(echo "$git_payload" | /opt/git-resource/check $@)
 latest_ref=$(echo "$git_refs" | jq -r '.[0].ref // ""')
 
-echo "latest_ref: --$latest_ref--"
-
 if [ -z "$latest_ref" ]; then
   echo "no values available that passed the gate"
   echo '[]' | jq -r >&3

@@ -131,7 +131,7 @@ put_gate() {
   local uri="$1"
   local source="$2"
   local gate="$3"
-  local passed_file="$4"
+  local item_file="$4"
   local repo="$5"
 
   jq -n "{
@@ -139,12 +139,12 @@ put_gate() {
       git: {
         uri: $(echo $uri | jq -R .),
         branch: \"master\"
-      }
+      },
+      gate: $(echo $gate | jq -R .)
     },
     params: {
-      gate: $(echo $gate | jq -R .),
       gate_repository: $(echo $repo | jq -R .),
-      passed_file: $(echo $passed_file | jq -R .)
+      item_file: $(echo $item_file | jq -R .)
     }
   }" | ${resource_dir}/out "$source" | tee /dev/stderr
 }
