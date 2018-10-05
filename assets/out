@@ -64,6 +64,7 @@ try_autoclose() {
 
   # we process all items as this helps debuggability
   local passed=true
+  echo ""
   echo "try autoclose: $item"
   echo "----------------------"
   while IFS="" read -r p || [ -n "$p" ]
@@ -78,7 +79,7 @@ try_autoclose() {
   done < "$item"
 
   if [ $passed = true ]; then 
-    echo "autoclosing $item"
+    echo "=> autoclosing $item"
     mv "$item" "${item//\.autoclose/}"
 
     commit "$repository" "autoclosed $item"
@@ -146,21 +147,23 @@ else
       # we did not close any gates, return the current HEAD revision
       # concourse will detect this resource version as already existing and won't trigger anything
       echo "no autoclose items were closed"
-      gate_ref=$(git -C $repository rev-parse HEAD)
+      result_item="none"
+      result_ref="none"
+      break
     else
       # try push
-      if [ ! $(echo "$git_payload" | /opt/git-resource/out $source) ]; then
+      if [ $(git -C $repository push push-target $branch ) ]; then
         echo "pushing failed, retrying"
         git -C $repository reset --hard push-target/$branch
         continue
       fi
       echo "pushing succeeded"
-    fi
 
-    passed_file=$(git -C "$repository" diff-tree --no-commit-id --name-only -r "$gate_ref" | grep "$gate")
-    result_item=$(basename $passed_file)
-    result_ref=$gate_ref
-    break
+      passed_file=$(git -C "$repository" diff-tree --no-commit-id --name-only -r "$gate_ref" | grep "$gate")
+      result_item=$(basename $passed_file)
+      result_ref=$gate_ref
+      break
+    fi
   done
 fi
 

@@ -68,7 +68,7 @@ it_can_put_item_to_autoclose_gate() {
   test -e "$upstreamRepo/$gate/$item"
 }
 
-update_autoclose_gate_with_no_closable_items_returns_head() {
+update_autoclose_gate_with_no_closable_items_returns_none() {
   local gate="auto-gate"
 
   local upstreamRepo=$(init_repo)
@@ -90,12 +90,71 @@ update_autoclose_gate_with_no_closable_items_returns_head() {
   test $pushed_ref == $head_ref
   # check output
   echo "$result" | jq -e '
-    .version == { "ref": "'$head_ref'" }
+    .version == { "ref": "none" }
     and (.metadata | .[] | select(.name == "gate") | .value == "'$gate'")
-    and (.metadata | .[] | select(.name == "passed") | .value == "'1.autoclose'")
+    and (.metadata | .[] | select(.name == "passed") | .value == "none")
+  '
+}
+
+update_autoclose_gate_with_empty_gate_returns_none() {
+  local gate="auto-gate"
+
+  local upstreamRepo=$(init_repo)
+  local head_ref=$(make_commit_to_file $upstreamRepo "my-gate/1")
+    
+  local src=$(mktemp -d $TMPDIR/put-src.XXXXXX)
+  local localRepo=$src/gate-repo
+  git clone $upstreamRepo $localRepo
+
+  upstream_repo_allow_push $upstreamRepo
+  result=$(put_gate_update_autoclose $upstreamRepo $src $gate)
+  
+  upstream_repo_allow_asserts $upstreamRepo
+  local pushed_ref="$(git -C $upstreamRepo rev-parse HEAD)"
+
+  # check no new commit was created
+  test $pushed_ref == $head_ref
+  # check output
+  echo "$result" | jq -e '
+    .version == { "ref": "none" }
+    and (.metadata | .[] | select(.name == "gate") | .value == "'$gate'")
+    and (.metadata | .[] | select(.name == "passed") | .value == "none")
+  '
+}
+
+update_autoclose_gate_with_closable_items_returns_first_closed() {
+  local gate="auto-gate"
+
+  local upstreamRepo=$(init_repo)
+  mkdir -p "$upstreamRepo/$gate"
+  mkdir -p "$upstreamRepo/simple-gate"
+  echo "simple-gate/a" >> "$upstreamRepo/$gate/1.autoclose"
+  echo "simple-gate/a" >> "$upstreamRepo/$gate/2.autoclose"
+  echo "simple-gate/a" >> "$upstreamRepo/simple-gate/a"
+  local head_ref=$(make_commit_with_all_changes $upstreamRepo)
+  
+  local src=$(mktemp -d $TMPDIR/put-src.XXXXXX)
+  local localRepo=$src/gate-repo
+  git clone $upstreamRepo $localRepo
+
+  upstream_repo_allow_push $upstreamRepo
+  result=$(put_gate_update_autoclose $upstreamRepo $src $gate)
+  
+  upstream_repo_allow_asserts $upstreamRepo
+  local pushed_ref="$(git -C $upstreamRepo rev-parse HEAD~1)" # 2 items were closed
+
+  # check new commit was created
+  test ! $pushed_ref == $head_ref
+  # check output
+  echo "$result" | jq -e '
+    .version == { "ref": "'$pushed_ref'" }
+    and (.metadata | .[] | select(.name == "gate") | .value == "'$gate'")
+    and (.metadata | .[] | select(.name == "passed") | .value == "1")
   '
 }
 
 run it_can_put_item_to_simple_gate
 run it_can_put_item_to_autoclose_gate
-run update_autoclose_gate_with_no_closable_items_returns_head
+run update_autoclose_gate_with_no_closable_items_returns_none
+run update_autoclose_gate_with_empty_gate_returns_none
+run update_autoclose_gate_with_closable_items_returns_first_closed
