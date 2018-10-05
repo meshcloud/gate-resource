@@ -6,8 +6,9 @@ set -e
 exec 3>&1 # make stdout available as fd 3 for the result
 exec 1>&2 # redirect all output to stderr for logging
 
+shopt -s nullglob
+
 source=$1
-autoclose_cmd=$(dirname $0)/autoclose.sh
 
 if [ -z "$source" ]; then
   echo "usage: $0 <path/to/source>"
@@ -22,10 +23,11 @@ cat > $payload <&0
 
 # parse parameters
 gate=$(jq -r '.source.gate // ""' < $payload)
-gate_repository=$(jq -r '.params.gate_repository // ""' < $payload)
 item_file=$(jq -r '.params.item_file // ""' < $payload)
 update_autoclose=$(jq -r '.params.update_autoclose // ""' < $payload)
-git_config_payload=$(jq -r '.source.git.git_config // []' < $payload)
+git_source=$(jq -r .source.git < $payload)
+branch=$(jq -r '.source.git.branch // ""' < $payload)
+uri=$(jq -r '.source.git.uri // ""' < $payload)
 
 if [[ -z "$item_file" && -z "$update_autoclose" ]]; then
   echo "invalid payload (missing item_file or update_autoclose):" >&2
@@ -33,81 +35,142 @@ if [[ -z "$item_file" && -z "$update_autoclose" ]]; then
   exit 1
 fi
 
-configure_git_global() {
-  local git_config_payload="$1"
-  eval $(echo "$git_config_payload" | \
-    jq -r ".[] | \"git config --global '\\(.name)' '\\(.value)'; \"")
+clone() {
+  local git_source="$1"
+  local repository="$2"
+  # specify no version, we clone at HEAD
+  git_payload=$(echo '{ "source": '$git_source' }' | jq -r)
+
+  # forward to git-resource to let it fetch the repository
+  # note tat a side-effect of this is that the global git configuration gets changed
+  echo "$git_payload" | /opt/git-resource/in $repository  
 }
 
 commit() {
   local repository="$1"
   local msg="$2"
-  git -C $repository add .
-  git -C $repository status
-  if [ -z "$(git -C $repository status --porcelain)" ]; then 
+  git -C "$repository" add .
+  git -C "$repository" status
+  if [ -z "$(git -C "$repository" status --porcelain)" ]; then 
     echo "nothing to commit - skipping"
   else 
-    git -C $repository commit -m "$msg"
+    git -C "$repository" commit -m "$msg"
   fi
 }
 
-cd $source
-configure_git_global "${git_config_payload}"
+try_autoclose() {
+  local repository="$1"
+  local item="$2"
 
-# determine operation to emit as a resulting version
-operation="passed"
-if [ ! -z "$item_file" ]; then
-  # dervice item name, note that item_file may contain wildcards
-  item=$(basename $item_file)
-  # TODO: this check't work, but we need to revisit our version strategy anyway
-  if [[ $item == *.autoclose ]]; then
-    operation="updated"
+  # we process all items as this helps debuggability
+  local passed=true
+  echo "try autoclose: $item"
+  echo "----------------------"
+  while IFS="" read -r p || [ -n "$p" ]
+  do
+    echo -n "- testing $p: "
+    if [[ ! -e "$repository/$p" ]]; then
+      echo "fail"
+      passed=false
+      break;
+    fi;
+    echo "ok"
+  done < "$item"
+
+  if [ $passed = true ]; then 
+    echo "autoclosing $item"
+    mv "$item" "${item//\.autoclose/}"
+
+    commit "$repository" "autoclosed $item"
   fi
+}
+
+repository=$(mktemp -d "$TMPDIR/gate-resource-repo.XXXXXX")
+clone "$git_source" "$repository"
+
+cd "$source"
+
+result_ref=""
+result_meta="[]"
+
+if [ ! -z "$item_file" ]; then
+  # dervice item name, note that item_file may contain wildcards so it must be unquoted here
+  item=$(basename $item_file)
 
   # write gate status
-  mkdir -p $gate_repository/$gate                 # ensure gate-directory exists
-  $(cp $item_file "$gate_repository/$gate/$item") # item_file should be interpolated, so we run it in a subshell
+  mkdir -p "$repository/$gate"                 # ensure gate-directory exists
+  cp $item_file "$repository/$gate/$item"      # item_file should be interpolated, so we don't quote it
 
-  commit "$gate_repository" "$operation gate"
+  commit "$repository" "$item passed gate $gate"
 
-  # extract git configuration and pass it to git resource
   # note: gate item pushes may be safely rebased
-  git_source=$(cat "$payload" | jq -r .source.git)
   git_payload=$(jq -n "{
     source: $git_source,
     params: {
-      repository: $(echo $gate_repository | jq -R .),
+      repository: $(echo $repository | jq -R .),
       rebase: true
     }
   }")
 
-    # forward to git-resource to let it push
-  echo "$git_payload" | /opt/git-resource/out $source
-
-else
-  operation="passed"
-  # todo: autocloses must be in a separate commit each, introduce with version: every support
-  $autoclose_cmd "$gate_repository/$gate"
-  commit "$gate_repository" "processed autoclose in $gate"
-
-  # extract git configuration and pass it to git resource
-  # note: autoclose update cannot be safely rebased and need to be serialized
-  # however, we'd need a proper rebase and update loop in here to implement this.
-  git_source=$(cat "$payload" | jq -r .source.git)
-  git_payload=$(jq -n "{
-    source: $git_source,
-    params: {
-      repository: $(echo $gate_repository | jq -R .)
-    }
-  }")
-
   # forward to git-resource to let it push
-  echo "$git_payload" | /opt/git-resource/out $source
+  git_result=$(echo "$git_payload" | /opt/git-resource/out $source)
+  result_item=$item
+  result_ref=$(echo $git_result | jq -r .version.ref)
+else
+  git -C $repository remote add push-target $uri
+
+  while true; do
+    echo "processing autoclose gates..."
+    git -C $repository pull push-target $branch
+    git -C $repository clean --force --force -d
+
+    for item in $repository/$gate/*.autoclose; do
+      try_autoclose $repository $item
+    done
+
+    # autoclose gates may not be rebased
+    git_payload=$(jq -n "{
+      source: $git_source,
+      params: {
+        repository: $(echo $repository | jq -R .)
+      }
+    }")
+
+    # we may have closed multiple gates at once. However, it's important
+    # that we only emit the _first_ gate that we closed so that the resource can 
+    # still be checked using `version: every` for all following gates that were closed
+
+    # find first autoclose commit, this is the first commit after origin/master
+    gate_ref=$(git -C $repository rev-list --ancestry-path push-target/$branch..HEAD | tail -n 1)
+    if [ -z $gate_ref ]; then
+      # we did not close any gates, return the current HEAD revision
+      # concourse will detect this resource version as already existing and won't trigger anything
+      echo "no autoclose items were closed"
+      gate_ref=$(git -C $repository rev-parse HEAD)
+    else
+      # try push
+      if [ ! $(echo "$git_payload" | /opt/git-resource/out $source) ]; then
+        echo "pushing failed, retrying"
+        git -C $repository reset --hard push-target/$branch
+        continue
+      fi
+      echo "pushing succeeded"
+    fi
+
+    passed_file=$(git -C "$repository" diff-tree --no-commit-id --name-only -r "$gate_ref" | grep "$gate")
+    result_item=$(basename $passed_file)
+    result_ref=$gate_ref
+    break
+  done
 fi
 
+# return result
+result_meta=$(jq -n "[
+  { name: \"gate\", value: \"$gate\" },
+  { name: \"passed\", value: \"$result_item\" }
+]")
+
 jq -n "{
-  version: {
-    gate: \"$gate\",
-    \"$operation\": \"$item\"
-  }
+  version: { ref: $(echo $result_ref | jq -R .) },
+  metadata: $result_meta
 }" >&3

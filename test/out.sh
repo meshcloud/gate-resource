@@ -4,10 +4,10 @@ set -e
 
 source $(dirname $0)/helpers.sh
 
-it_can_put_simplegate() {
+it_can_put_item_to_simple_gate() {
   local upstreamRepo=$(init_repo)
-  # cannot push to repo while it's checked out to a branch, so we switch to a different branch
-  git -C $upstreamRepo checkout --quiet refs/heads/master
+  local initial_ref=$(make_commit $upstreamRepo)
+  upstream_repo_allow_push $upstreamRepo
 
   local src=$(mktemp -d $TMPDIR/put-src.XXXXXX)
   local localRepo=$src/gate-repo
@@ -15,52 +15,87 @@ it_can_put_simplegate() {
 
   local gate="my-gate"
   local item_file="gating-task/*"
-  local passed="1234"
+  local item="1234"
   mkdir -p $src/gating-task
-  echo "arbitrary contents" > $src/gating-task/$passed
+  echo "arbitrary contents" > $src/gating-task/$item
 
-  result=$(put_gate $upstreamRepo $src $gate $item_file "gate-repo")
-  echo "result: $result"
-  echo "$result" | jq -e '
-    .version == {"gate": "'$gate'", "passed": "'$passed'"}
-  '
+  result=$(put_gate_item_file $upstreamRepo $src $gate $item_file)
 
-  # check that the gate file was written
   git -C $upstreamRepo checkout master
-  ls -la $upstreamRepo/$gate
-  
-  local expectedFile="$upstreamRepo/$gate/$passed"
-  echo "testing $expectedFile"
-  test -e $expectedFile
+  local pushed_ref="$(git -C $upstreamRepo rev-parse HEAD)"
+
+  # check a new commit was created
+  test ! $pushed_ref == $initial_ref
+  # check output
+  echo "$result" | jq -e '
+    .version == { "ref": "'$pushed_ref'" }
+    and (.metadata | .[] | select(.name == "gate") | .value == "'$gate'")
+    and (.metadata | .[] | select(.name == "passed") | .value == "'$item'")
+  '
+  # check that the gate file was written
+  test -e "$upstreamRepo/$gate/$item"
 }
 
-it_can_put_autogate() {
+it_can_put_item_to_autoclose_gate() {
   local upstreamRepo=$(init_repo)
-  # cannot push to repo while it's checked out to a branch, so we switch to a different branch
-  git -C $upstreamRepo checkout --quiet refs/heads/master
+  local initial_ref=$(make_commit $upstreamRepo)
+  upstream_repo_allow_push $upstreamRepo
 
   local src=$(mktemp -d $TMPDIR/put-src.XXXXXX)
   local localRepo=$src/gate-repo
   git clone $upstreamRepo $localRepo
 
   local gate="auto-gate"
-  local item_file="gating-task/*autogate"
-  local item="1234.autogate"
+  local item_file="gating-task/*.autoclose"
+  local item="1234.autoclose"
   mkdir -p $src/gating-task
   echo "simple-gate/1" >> $src/gating-task/$item
 
-  put_gate $upstreamRepo $src $gate $item_file "gate-repo" | jq -e '
-    .version == {"gate": "'$gate'", "passed": "'$item'"}
-  '
+  result=$(put_gate_item_file $upstreamRepo $src $gate $item_file)
 
-  # check that the gate file was written
   git -C $upstreamRepo checkout master
-  ls -la $upstreamRepo/$gate
-  
-  local expectedFile="$upstreamRepo/$gate/$item"
-  echo "testing $expectedFile"
-  test -e $expectedFile
+  local pushed_ref="$(git -C $upstreamRepo rev-parse HEAD)"
+
+  # check a new commit was created
+  test ! $pushed_ref == $initial_ref
+  # check output
+  echo "$result" | jq -e '
+    .version == { "ref": "'$pushed_ref'" }
+    and (.metadata | .[] | select(.name == "gate") | .value == "'$gate'")
+    and (.metadata | .[] | select(.name == "passed") | .value == "'$item'")
+  '
+  # check that the gate file was written
+  test -e "$upstreamRepo/$gate/$item"
 }
 
-run it_can_put_simplegate
-run it_can_put_autogate
+update_autoclose_gate_with_no_closable_items_returns_head() {
+  local gate="auto-gate"
+
+  local upstreamRepo=$(init_repo)
+  mkdir -p "$upstreamRepo/$gate"
+  echo "simple-gate/1" >> "$upstreamRepo/$gate/1.autoclose"
+  local head_ref=$(make_commit_with_all_changes $upstreamRepo)
+  
+  local src=$(mktemp -d $TMPDIR/put-src.XXXXXX)
+  local localRepo=$src/gate-repo
+  git clone $upstreamRepo $localRepo
+
+  upstream_repo_allow_push $upstreamRepo
+  result=$(put_gate_update_autoclose $upstreamRepo $src $gate)
+  
+  upstream_repo_allow_asserts $upstreamRepo
+  local pushed_ref="$(git -C $upstreamRepo rev-parse HEAD)"
+
+  # check no new commit was created
+  test $pushed_ref == $head_ref
+  # check output
+  echo "$result" | jq -e '
+    .version == { "ref": "'$head_ref'" }
+    and (.metadata | .[] | select(.name == "gate") | .value == "'$gate'")
+    and (.metadata | .[] | select(.name == "passed") | .value == "'1.autoclose'")
+  '
+}
+
+run it_can_put_item_to_simple_gate
+run it_can_put_item_to_autoclose_gate
+run update_autoclose_gate_with_no_closable_items_returns_head

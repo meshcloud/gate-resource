@@ -126,6 +126,19 @@ make_commit() {
   make_commit_to_file $1 some-file "${2:-}"
 }
 
+make_commit_with_all_changes() {
+  local repo="$1"
+
+  git -C $repo add .
+  git -C $repo \
+    -c user.name='test' \
+    -c user.email='test@example.com' \
+    commit -q -m "commit"
+
+  # output resulting sha
+  git -C $repo rev-parse HEAD
+}
+
 get_gate_at_ref() {
   local uri="$1"
   local ref="$2"
@@ -143,12 +156,11 @@ get_gate_at_ref() {
   }" | ${resource_dir}/in "$destination" | tee /dev/stderr
 }
 
-put_gate() {
+put_gate_item_file() {
   local uri="$1"
   local source="$2"
   local gate="$3"
   local item_file="$4"
-  local repo="$5"
 
   jq -n "{
     source: {
@@ -159,8 +171,36 @@ put_gate() {
       gate: $(echo $gate | jq -R .)
     },
     params: {
-      gate_repository: $(echo $repo | jq -R .),
       item_file: $(echo $item_file | jq -R .)
     }
   }" | ${resource_dir}/out "$source" | tee /dev/stderr
+}
+
+put_gate_update_autoclose() {
+  local uri="$1"
+  local source="$2"
+  local gate="$3"
+
+  jq -n "{
+    source: {
+      git: {
+        uri: $(echo $uri | jq -R .),
+        branch: \"master\"
+      },
+      gate: $(echo $gate | jq -R .)
+    },
+    params: {
+      update_autoclose: true
+    }
+  }" | ${resource_dir}/out "$source" | tee /dev/stderr
+}
+
+upstream_repo_allow_push() {
+  # cannot push to repo while it's checked out to a branch, so we switch to a different branch
+  git -C $1 checkout --quiet refs/heads/master
+}
+
+upstream_repo_allow_asserts() {
+  # cannot push to repo while it's checked out to a branch, so we switch to a different branch
+  git -C $1 checkout --quiet master
 }
