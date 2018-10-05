@@ -25,9 +25,9 @@ cat > $payload <&0
 gate=$(jq -r '.source.gate // ""' < $payload)
 item_file=$(jq -r '.params.item_file // ""' < $payload)
 update_autoclose=$(jq -r '.params.update_autoclose // ""' < $payload)
+simulate_rebase=$(jq -r '.params.for_test_only_simulate_rebase // ""' < $payload)
 git_source=$(jq -r .source.git < $payload)
 branch=$(jq -r '.source.git.branch // ""' < $payload)
-uri=$(jq -r '.source.git.uri // ""' < $payload)
 
 if [[ -z "$item_file" && -z "$update_autoclose" ]]; then
   echo "invalid payload (missing item_file or update_autoclose):" >&2
@@ -50,11 +50,10 @@ commit() {
   local repository="$1"
   local msg="$2"
   git -C "$repository" add .
-  git -C "$repository" status
   if [ -z "$(git -C "$repository" status --porcelain)" ]; then 
     echo "nothing to commit - skipping"
   else 
-    git -C "$repository" commit -m "$msg"
+    git -C "$repository" commit --quiet -m "$msg"
   fi
 }
 
@@ -84,6 +83,7 @@ try_autoclose() {
 
     commit "$repository" "autoclosed $item"
   fi
+  echo "----------------------"
 }
 
 repository=$(mktemp -d "$TMPDIR/gate-resource-repo.XXXXXX")
@@ -118,12 +118,17 @@ if [ ! -z "$item_file" ]; then
   result_item=$item
   result_ref=$(echo $git_result | jq -r .version.ref)
 else
-  git -C $repository remote add push-target $uri
+  git -C $repository pull
+
+  # FOR TEST ONLY: simulate out of date repository
+  if [ ! -z $simulate_rebase ]; then
+    echo $(git -C $repository rev-parse HEAD~1) > $repository/.git/refs/remotes/origin/$branch
+    git -C $repository reset --hard HEAD~1
+  fi
 
   while true; do
     echo "processing autoclose gates..."
-    git -C $repository pull push-target $branch
-    git -C $repository clean --force --force -d
+    git -C $repository clean --force --force -d # make sure we start with a clean slate
 
     for item in $repository/$gate/*.autoclose; do
       try_autoclose $repository $item
@@ -142,7 +147,7 @@ else
     # still be checked using `version: every` for all following gates that were closed
 
     # find first autoclose commit, this is the first commit after origin/master
-    gate_ref=$(git -C $repository rev-list --ancestry-path push-target/$branch..HEAD | tail -n 1)
+    gate_ref=$(git -C $repository rev-list --ancestry-path origin/$branch..HEAD | tail -n 1)
     if [ -z $gate_ref ]; then
       # we did not close any gates, return the current HEAD revision
       # concourse will detect this resource version as already existing and won't trigger anything
@@ -152,9 +157,10 @@ else
       break
     else
       # try push
-      if [ $(git -C $repository push push-target $branch ) ]; then
+      if ! git -C $repository push; then
         echo "pushing failed, retrying"
-        git -C $repository reset --hard push-target/$branch
+        git -C $repository fetch 
+        git -C $repository reset --hard origin/$branch
         continue
       fi
       echo "pushing succeeded"

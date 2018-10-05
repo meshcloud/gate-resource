@@ -195,6 +195,26 @@ put_gate_update_autoclose() {
   }" | ${resource_dir}/out "$source" | tee /dev/stderr
 }
 
+put_gate_update_autoclose_rebase() {
+  local uri="$1"
+  local source="$2"
+  local gate="$3"
+
+  jq -n "{
+    source: {
+      git: {
+        uri: $(echo $uri | jq -R .),
+        branch: \"master\"
+      },
+      gate: $(echo $gate | jq -R .)
+    },
+    params: {
+      update_autoclose: true,
+      for_test_only_simulate_rebase: true
+    }
+  }" | ${resource_dir}/out "$source" | tee /dev/stderr
+}
+
 upstream_repo_allow_push() {
   # cannot push to repo while it's checked out to a branch, so we switch to a different branch
   git -C $1 checkout --quiet refs/heads/master

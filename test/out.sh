@@ -130,7 +130,7 @@ update_autoclose_gate_with_closable_items_returns_first_closed() {
   mkdir -p "$upstreamRepo/simple-gate"
   echo "simple-gate/a" >> "$upstreamRepo/$gate/1.autoclose"
   echo "simple-gate/a" >> "$upstreamRepo/$gate/2.autoclose"
-  echo "simple-gate/a" >> "$upstreamRepo/simple-gate/a"
+  echo "x" >> "$upstreamRepo/simple-gate/a"
   local head_ref=$(make_commit_with_all_changes $upstreamRepo)
   
   local src=$(mktemp -d $TMPDIR/put-src.XXXXXX)
@@ -153,8 +153,52 @@ update_autoclose_gate_with_closable_items_returns_first_closed() {
   '
 }
 
+
+update_autoclose_gate_with_closable_items_retries_using_rebase_on_conflicts() {
+  local gate="auto-gate"
+
+  local upstreamRepo=$(init_repo)
+  mkdir -p "$upstreamRepo/$gate"
+  mkdir -p "$upstreamRepo/simple-gate"
+  echo "simple-gate/a" >> "$upstreamRepo/$gate/1.autoclose"
+  echo "simple-gate/b" >> "$upstreamRepo/$gate/2.autoclose"
+  echo "x" >> "$upstreamRepo/simple-gate/a"
+  local upstream_initial_ref=$(make_commit_with_all_changes $upstreamRepo)
+  
+  local src=$(mktemp -d $TMPDIR/put-src.XXXXXX)
+  local localRepo=$src/gate-repo
+  git clone $upstreamRepo $localRepo
+
+  # make a change to upstream, local has to rebase before pushing
+  # now two gates are autoclosable
+  echo "x" >> "$upstreamRepo/simple-gate/b"
+  local upstream_rebase_ref=$(make_commit_with_all_changes $upstreamRepo)
+
+  echo ""
+  echo "bumped upstream $upstream_initial_ref -> $upstream_rebase_ref"
+  echo "" 
+
+  upstream_repo_allow_push $upstreamRepo
+  result=$(put_gate_update_autoclose_rebase $upstreamRepo $src $gate)
+  
+  upstream_repo_allow_asserts $upstreamRepo
+  local rebased_from_ref="$(git -C $upstreamRepo rev-parse HEAD~2)" 
+  local first_closed_ref="$(git -C $upstreamRepo rev-parse HEAD~1)" 
+  
+  # check new commit was created
+  test ! $upstream_initial_ref == $upstream_rebase_ref 
+  test $rebased_from_ref == $upstream_rebase_ref 
+  # check output
+  echo "$result" | jq -e '
+    .version == { "ref": "'$first_closed_ref'" }
+    and (.metadata | .[] | select(.name == "gate") | .value == "'$gate'")
+    and (.metadata | .[] | select(.name == "passed") | .value == "1")
+  '
+}
+
 run it_can_put_item_to_simple_gate
 run it_can_put_item_to_autoclose_gate
 run update_autoclose_gate_with_no_closable_items_returns_none
 run update_autoclose_gate_with_empty_gate_returns_none
 run update_autoclose_gate_with_closable_items_returns_first_closed
+run update_autoclose_gate_with_closable_items_retries_using_rebase_on_conflicts
