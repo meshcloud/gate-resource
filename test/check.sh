@@ -10,9 +10,9 @@ it_can_check_from_head() {
 
   local gate_ref=$(make_commit_to_file $repo "my-gate/1234")
 
-  check_gate $repo "my-gate" | jq -e '
-    . == [{"gate": "my-gate", "passed": "1234"}]
-  '
+  check_gate $repo "my-gate" | jq -e "
+    . == [{ref: $(echo $gate_ref | jq -R .)}]
+  "
 }
 
 it_can_check_empty_repo() {
@@ -25,26 +25,43 @@ it_can_check_empty_repo() {
 
 it_can_check_empty_gate() {
   local repo=$(init_repo)
-  local ref=$(make_commit $repo)
+  
+  make_commit $repo
+  make_commit_to_file $repo "other-gate/1234"
 
   check_gate $repo "my-gate" | jq -e '
     . == []
   '
 }
 
-it_emits_latest_version_only() {
+it_can_check_and_ignore_open_autogates() {
   local repo=$(init_repo)
-  local ref=$(make_commit $repo)
-
-  local gate_ref1=$(make_commit_to_file $repo "my-gate/1234")
-  local gate_ref2=$(make_commit_to_file $repo "my-gate/abcd")
+  
+  make_commit $repo
+  make_commit_to_file $repo "my-gate/1234.autogate"
 
   check_gate $repo "my-gate" | jq -e '
-    . == [{"gate": "my-gate", "passed": "abcd"}]
+    . == []
   '
+}
+
+it_can_check_from_a_ref() {
+  local repo=$(init_repo)
+  
+  local gate_ref1=$(make_commit_to_file $repo "my-gate/1")
+  local gate_ref2=$(make_commit_to_file $repo "my-gate/2")
+  local gate_ref3=$(make_commit_to_file $repo "my-gate/3")
+
+  check_gate_at_ref $repo "my-gate" "$gate_ref2" | jq -e "
+    . == [
+      {ref: $(echo $gate_ref2 | jq -R .)},
+      {ref: $(echo $gate_ref3 | jq -R .)}
+    ]
+  "
 }
 
 run it_can_check_from_head
 run it_can_check_empty_repo
 run it_can_check_empty_gate
-run it_emits_latest_version_only
+run it_can_check_and_ignore_open_autogates
+run it_can_check_from_a_ref

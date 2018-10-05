@@ -10,27 +10,15 @@ payload=$TMPDIR/gate-resource-request
 cat > $payload <&0
 
 gate=$(jq -r '.source.gate // ""' < $payload)
+version=$(jq -r '.version // {}' < $payload)
 
 # extract git configuration and pass it to git resource
 git_source=$(cat "$payload" | jq -r .source.git)
-git_payload=$(echo '{ "source": '$git_source' }' | jq -r)
-git_payload=$(echo "$git_payload" | jq -r '.source.paths = ["'$gate'"]') # only watch the gate path
+git_payload=$(echo '{ "source": '$git_source', "version": '$version' }' | jq -r)
+
+# only watch the gate path, ignore all autogates
+git_payload=$(echo "$git_payload" | jq -r '.source.paths = ["'$gate'"]')
+git_payload=$(echo "$git_payload" | jq -r '.source.ignore_paths = ["'**.autogate'"]')
 
 # forward to git-resource to let it do its checking
-git_refs=$(echo "$git_payload" | /opt/git-resource/check $@)
-latest_ref=$(echo "$git_refs" | jq -r '.[0].ref // ""')
-
-if [ -z "$latest_ref" ]; then
-  echo "no values available that passed the gate"
-  echo '[]' | jq -r >&3
-  exit 0;
-fi
-
-# ref is available, identify the value that passsed the gate
-destination=$TMPDIR/git-resource-repo-cache
-cd $destination
-
-# for now, only emit the latest value that passed the gate based on the file changed in the most recent commit
-passed_file=$(git diff-tree --no-commit-id --name-only -r $latest_ref | grep $gate)
-passed_value=$(basename $passed_file)
-echo '[{ "gate": "'$gate'", "passed": "'$passed_value'" }]' | jq -r >&3
+echo "$git_payload" | /opt/git-resource/check "$@" >&3

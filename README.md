@@ -52,13 +52,7 @@ When all dependant items passed, the autogate closes and drops the `.autogate` e
 
 The repository is cloned (or pulled if already present), and any commits made to the specified `gate` from the given version on are checked for items passing through the gate.
 
-> note:  Check currently only returns the latest item that passed a gate (i.e. it may miss intermediate passes).
-
-The version returned to concourse looks like this:
-
-```json
-{ "gate": "my-gate", "passed": "1234" }
-```
+> note: If you want to ensure the resource triggers for every item that passed the gate, use the resource with `version: every`
 
 ### `in`: Fetch an item that passed a gate
 
@@ -98,10 +92,3 @@ Run the tests with the following command:
 ```sh
 docker build -t gate-resource .
 ```
-
-## Known Issues
-
-The resource has the following known issues (mostly because they have not been implemented yet):
-
-* `check` will always fetch HEAD and simply emit the latest passed gate. This may cause a pipeline to miss items that passed a gate. Instead, it should probably emit all the versions that have changed in between the last check and the current check. This would make it possible to use the resource with `version: every` and trigger for every item passing a gate.
-* as

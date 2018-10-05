@@ -20,32 +20,32 @@ payload=$(mktemp $TMPDIR/gate-resource-request.XXXXXX)
 cat > $payload <&0
 
 # parse parameters
+gate=$(jq -r '.source.gate // ""' < $payload)
 version=$(jq -r '.version' < $payload)
-passed=$(jq -r '.version.passed // ""' < $payload)
-gate=$(jq -r '.version.gate // ""' < $payload)
-
-if [ -z "$passed" ]; then
-  echo "gate did not pass, nothing to fetch (did you just put?)"
-  jq -n "{
-    version: $version,
-    metadata: []
-  }" >&3  
-  exit 0
-fi
+version_ref=$(jq -r '.version.ref' < $payload)
 
 # extract git configuration and pass it to git resource
 git_source=$(cat "$payload" | jq -r .source.git)
-git_payload=$(echo '{ "source": '$git_source' }' | jq -r)
+git_payload=$(echo '{ "source": '$git_source', "version": '$version' }' | jq -r)
 
-# forward to git-resource to let it fetch the repository, we always fetch at HEAD
-git_out=$(echo "$git_payload" | /opt/git-resource/in $destination)
-git_meta=$(echo $git_out | jq -r .metadata)
+# forward to git-resource to let it fetch the repository
+echo "$git_payload" | /opt/git-resource/in $destination
 
-# write passed file
-cp $destination/$gate/$passed $destination/metadata
-echo "$passed" > $destination/passed
+# ref is available, identify the value that passsed the gate
+# emit the item that passed gate based on the file changed in the commit fetched
+cd $destination
+passed_file=$(git diff-tree --no-commit-id --name-only -r "$version_ref" | grep "$gate")
+passed_item=$(basename $passed_file)
+gate_meta=$(jq -n "[
+  { name: \"gate\", value: \"$gate\" },
+  { name: \"passed\", value: \"$passed_item\" }
+]")
+
+# write two files, passed (item name) and metadata (item file)
+echo "$passed_item" > "$destination/passed"
+cp "$destination/$gate/$passed_file" "$destination/metadata"
 
 jq -n "{
   version: $version,
-  metadata: $git_meta
+  metadata: $gate_meta
 }" >&3

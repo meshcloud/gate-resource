@@ -68,6 +68,24 @@ check_gate() {
   }" | ${resource_dir}/check | tee /dev/stderr
 }
 
+check_gate_at_ref() {
+  local repo=$1
+  local gate=$2
+  local ref=$3
+
+  jq -n "{
+    source: {
+      git: {
+        uri: $(echo $repo | jq -R .)
+      },
+      gate: $(echo $gate | jq -R .)
+    },
+    version: {
+      ref: $(echo $ref | jq -R .)
+    }
+  }" | ${resource_dir}/check | tee /dev/stderr
+}
+
 make_commit_to_file_on_branch() {
   local repo=$1
   local file=$2
@@ -110,9 +128,8 @@ make_commit() {
 
 get_gate_at_ref() {
   local uri="$1"
-  local gate="$2"
-  local passed="$3"
-  local destination="$4"
+  local ref="$2"
+  local destination="$3"
 
   jq -n "{
     source: {
@@ -121,8 +138,7 @@ get_gate_at_ref() {
       }
     },
     version: {
-      gate: $(echo $gate | jq -R .),
-      passed: $(echo $passed | jq -R .)
+      ref: $(echo $ref | jq -R .)
     }
   }" | ${resource_dir}/in "$destination" | tee /dev/stderr
 }

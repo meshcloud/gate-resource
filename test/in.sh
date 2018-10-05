@@ -12,7 +12,9 @@ it_can_get_from_version() {
 
   local gate_ref=$(make_commit_to_file $repo "$gate/$passed")
 
-  get_gate_at_ref "$repo" $gate $passed "$dest"
+  get_gate_at_ref "$repo" "$gate_ref" "$dest" | jq -e "
+    .version == {ref: $(echo $gate_ref | jq -R .)}
+  "
 
   test $(cat $dest/passed) = "$passed"
   test $(cat $dest/metadata) = "x"
