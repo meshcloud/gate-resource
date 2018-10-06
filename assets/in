@@ -26,7 +26,14 @@ version_ref=$(jq -r '.version.ref' < $payload)
 
 # extract git configuration and pass it to git resource
 git_source=$(cat "$payload" | jq -r .source.git)
-git_payload=$(echo '{ "source": '$git_source', "version": '$version' }' | jq -r)
+git_payload=$(echo '{
+    "source": '$git_source',
+    "version": '$version',
+    "params": {
+      "disable_git_lfs": true,
+      "submodules": "none"
+    }
+  }' | jq -r)
 
 # forward to git-resource to let it fetch the repository
 echo "$git_payload" | /opt/git-resource/in $destination
@@ -34,6 +41,7 @@ echo "$git_payload" | /opt/git-resource/in $destination
 # ref is available, identify the value that passsed the gate
 # emit the item that passed gate based on the file changed in the commit fetched
 cd $destination
+
 passed_file=$(git diff-tree --no-commit-id --name-only -r "$version_ref" | grep "$gate")
 passed_item=$(basename $passed_file)
 gate_meta=$(jq -n "[
@@ -42,8 +50,8 @@ gate_meta=$(jq -n "[
 ]")
 
 # write two files, passed (item name) and metadata (item file)
-echo "$passed_item" > "$destination/passed"
-cp "$destination/$gate/$passed_file" "$destination/metadata"
+echo "$passed_item" > passed
+cp "$passed_file" metadata
 
 jq -n "{
   version: $version,

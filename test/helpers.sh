@@ -148,7 +148,8 @@ get_gate_at_ref() {
     source: {
       git: {
         uri: $(echo $uri | jq -R .)
-      }
+      },
+      gate: $(echo $gate | jq -R .)
     },
     version: {
       ref: $(echo $ref | jq -R .)

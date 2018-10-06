@@ -7,6 +7,7 @@ exec 3>&1 # make stdout available as fd 3 for the result
 exec 1>&2 # redirect all output to stderr for logging
 
 shopt -s nullglob
+source /opt/git-resource/common.sh
 
 source=$1
 
@@ -19,32 +20,44 @@ fi
 PATH=/usr/local/bin:$PATH
 
 payload=$(mktemp $TMPDIR/gate-resource-request.XXXXXX)
+git_source_payload=$(mktemp $TMPDIR/gate-resource-request.git.XXXXXX)
+
 cat > $payload <&0
+
+# configure git access using git-resource functions
+jq -n "{
+    source: $(jq -r '.source.git' < $payload)
+}" > $git_source_payload
+
+load_pubkey $git_source_payload
+load_git_crypt_key $git_source_payload
+configure_https_tunnel $git_source_payload
+configure_git_ssl_verification $git_source_payload
+configure_credentials $git_source_payload
 
 # parse parameters
 gate=$(jq -r '.source.gate // ""' < $payload)
 item_file=$(jq -r '.params.item_file // ""' < $payload)
 update_autoclose=$(jq -r '.params.update_autoclose // ""' < $payload)
 simulate_rebase=$(jq -r '.params.for_test_only_simulate_rebase // ""' < $payload)
-git_source=$(jq -r .source.git < $payload)
+
 branch=$(jq -r '.source.git.branch // ""' < $payload)
+uri=$(jq -r '.source.git.uri // ""' < $payload)
+git_config_payload=$(jq -r '.source.git.git_config // []' < $payload)
+
+configure_git_global "${git_config_payload}"
+
+if [ -z "$uri" ]; then
+  echo "invalid payload (missing uri):" >&2
+  cat $payload >&2
+  exit 1
+fi
 
 if [[ -z "$item_file" && -z "$update_autoclose" ]]; then
   echo "invalid payload (missing item_file or update_autoclose):" >&2
   cat $payload >&2
   exit 1
 fi
-
-clone() {
-  local git_source="$1"
-  local repository="$2"
-  # specify no version, we clone at HEAD
-  git_payload=$(echo '{ "source": '$git_source' }' | jq -r)
-
-  # forward to git-resource to let it fetch the repository
-  # note tat a side-effect of this is that the global git configuration gets changed
-  echo "$git_payload" | /opt/git-resource/in $repository  
-}
 
 commit() {
   local repository="$1"
@@ -87,91 +100,90 @@ try_autoclose() {
 }
 
 repository=$(mktemp -d "$TMPDIR/gate-resource-repo.XXXXXX")
-clone "$git_source" "$repository"
+git clone --single-branch $uri --branch $branch $repository
+
+# FOR TEST ONLY: simulate out of date repository
+if [ ! -z $simulate_rebase ]; then
+  echo $(git -C $repository rev-parse HEAD~1) > $repository/.git/refs/remotes/origin/$branch
+  git -C $repository reset --hard HEAD~1
+fi
 
 cd "$source"
 
+result_item=""
 result_ref=""
-result_meta="[]"
 
-if [ ! -z "$item_file" ]; then
-  # dervice item name, note that item_file may contain wildcards so it must be unquoted here
-  item=$(basename $item_file)
+# retry loop for commiting changes and pushing to the source
+while true; do
 
-  # write gate status
-  mkdir -p "$repository/$gate"                 # ensure gate-directory exists
-  cp $item_file "$repository/$gate/$item"      # item_file should be interpolated, so we don't quote it
+  # rollback any commits that we may have made in a failed previous iteration of the loop
+  git -C $repository reset --hard origin/$branch
+  git -C $repository clean --force --force -d # make sure we start with a clean slate
+  git -C $repository pull origin $branch
 
-  commit "$repository" "$item passed gate $gate"
+  # reset state
+  result_item=""
+  result_ref=""
 
-  # note: gate item pushes may be safely rebased
-  git_payload=$(jq -n "{
-    source: $git_source,
-    params: {
-      repository: $(echo $repository | jq -R .),
-      rebase: true
-    }
-  }")
+  if [ ! -z "$item_file" ]; then
+    echo "processing item_file..."
 
-  # forward to git-resource to let it push
-  git_result=$(echo "$git_payload" | /opt/git-resource/out $source)
-  result_item=$item
-  result_ref=$(echo $git_result | jq -r .version.ref)
-else
-  git -C $repository pull
+    # dervice item name, note that item_file may contain wildcards so it must be unquoted here
+    item=$(basename $item_file)
 
-  # FOR TEST ONLY: simulate out of date repository
-  if [ ! -z $simulate_rebase ]; then
-    echo $(git -C $repository rev-parse HEAD~1) > $repository/.git/refs/remotes/origin/$branch
-    git -C $repository reset --hard HEAD~1
-  fi
+    # TODO: maybe we sould also handle the case that the file already exists here
+    # write gate status
+    mkdir -p "$repository/$gate"                 # ensure gate-directory exists
+    cp $item_file "$repository/$gate/$item"      # item_file should be interpolated, so we don't quote it
 
-  while true; do
-    echo "processing autoclose gates..."
-    git -C $repository clean --force --force -d # make sure we start with a clean slate
+    commit "$repository" "$item passed gate $gate"
 
+    if ! git -C $repository push; then
+      echo "pushing failed, retrying"
+      continue
+    fi
+
+    result_item=$item
+    result_ref=$(git -C $repository rev-parse HEAD)
+  elif [ ! -z "$update_autoclose" ]; then
+    echo "processing update_autoclose..."
+    
     for item in $repository/$gate/*.autoclose; do
       try_autoclose $repository $item
     done
-
-    # autoclose gates may not be rebased
-    git_payload=$(jq -n "{
-      source: $git_source,
-      params: {
-        repository: $(echo $repository | jq -R .)
-      }
-    }")
 
     # we may have closed multiple gates at once. However, it's important
     # that we only emit the _first_ gate that we closed so that the resource can 
     # still be checked using `version: every` for all following gates that were closed
 
     # find first autoclose commit, this is the first commit after origin/master
-    gate_ref=$(git -C $repository rev-list --ancestry-path origin/$branch..HEAD | tail -n 1)
-    if [ -z $gate_ref ]; then
-      # we did not close any gates, return the current HEAD revision
+    first_gate_ref=$(git -C $repository rev-list --ancestry-path origin/$branch..HEAD | tail -n 1)
+    if [ -z $first_gate_ref ]; then
+      # we did not close any gates, return a dummy version
       # concourse will detect this resource version as already existing and won't trigger anything
+      # this could be better handled with https://github.com/concourse/concourse/issues/2660
       echo "no autoclose items were closed"
       result_item="none"
       result_ref="none"
-      break
     else
-      # try push
+      echo "some autoclose items were closed, emitting the first one (remaining will be found by next resource check)"
+      passed_file=$(git -C "$repository" diff-tree --no-commit-id --name-only -r "$first_gate_ref" | grep "$gate")
+      
       if ! git -C $repository push; then
         echo "pushing failed, retrying"
-        git -C $repository fetch 
-        git -C $repository reset --hard origin/$branch
         continue
       fi
-      echo "pushing succeeded"
 
-      passed_file=$(git -C "$repository" diff-tree --no-commit-id --name-only -r "$gate_ref" | grep "$gate")
       result_item=$(basename $passed_file)
-      result_ref=$gate_ref
-      break
+      result_ref=$first_gate_ref
     fi
-  done
-fi
+  else
+    echo "invalid out parameters, neither update_autoclose or item_file specified"
+    exit 1
+  fi
+
+  break
+done
 
 # return result
 result_meta=$(jq -n "[
