@@ -8,6 +8,10 @@ This resource is backed by a Git repository and wraps [git-resource](https://git
 
 > Contributors Welcome: This resource is new and hot off the press. We welcome your feedback and contributions!
 
+## Example
+
+To see an example pipeline using gate-resource, head over to [gate-resource-example](https://github.com/Meshcloud/gate-resource-example).
+
 ## Git Repository Structure
 
 ```text
