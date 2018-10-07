@@ -30,14 +30,20 @@ Each folder in the repository represents a gate. Files in each gate-folder repre
 
 ### Auto-gates
 
-Auto-gates are gates that automatically close depending on items passing through other gates. A `.autogate` is a simple text file that contains dependant items, one on each line. For example, `b.autogate` depends on these two items passing through `my-gate`:
+Auto-gates are gates that automatically close depending on items passing through other gates. An auto-gate contains `.autoclose` items, which is a simple text file that contains dependant items, one on each line. For example, `b.autoclose` depends on these two items passing through `my-gate`:
 
-```b.autogate
+```b.autoclose
 my-gate/2
 my-gate/3
 ```
 
-When all dependant items passed, the autogate closes and drops the `.autogate` extension from its filename.
+When all dependant items passed, the autoclose item closes and drops the `.autoclose` extension from its filename.
+
+#### The "none" version
+
+Unfortunately Concourse does not support emitting an empty set of versions from `out`. However, this is necessary for gate-resource as it may not find any autoclose items to close in a particular update. As a workaround, gate-resource emits the `none` version. `in` will no-op on encountering this version. 
+
+Since concourse detects that the `none` version already exists after the first time it's generated, it will only trigger a single build when an auto-gate is used with `trigger: true`. You can detect that the `none` version was fetched  when no `passed` and `metadata` files were created by the `get` step (see below).
 
 ## Source Configuration
 
