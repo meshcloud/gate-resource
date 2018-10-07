@@ -36,7 +36,7 @@ it_can_put_item_to_simple_gate() {
   test -e "$upstreamRepo/$gate/$item"
 }
 
-it_can_put_item_to_autoclose_gate() {
+it_can_put_autoclose_item_to_autoclose_gate() {
   local upstreamRepo=$(init_repo)
   local initial_ref=$(make_commit $upstreamRepo)
   upstream_repo_allow_push $upstreamRepo
@@ -60,9 +60,9 @@ it_can_put_item_to_autoclose_gate() {
   test ! $pushed_ref == $initial_ref
   # check output
   echo "$result" | jq -e '
-    .version == { "ref": "'$pushed_ref'" }
+    .version == { "ref": "none" }
     and (.metadata | .[] | select(.name == "gate") | .value == "'$gate'")
-    and (.metadata | .[] | select(.name == "passed") | .value == "'$item'")
+    and (.metadata | .[] | select(.name == "passed") | .value == "none")
   '
   # check that the gate file was written
   test -e "$upstreamRepo/$gate/$item"
@@ -197,7 +197,7 @@ update_autoclose_gate_with_closable_items_retries_using_rebase_on_conflicts() {
 }
 
 run it_can_put_item_to_simple_gate
-run it_can_put_item_to_autoclose_gate
+run it_can_put_autoclose_item_to_autoclose_gate
 run update_autoclose_gate_with_no_closable_items_returns_none
 run update_autoclose_gate_with_empty_gate_returns_none
 run update_autoclose_gate_with_closable_items_returns_first_closed

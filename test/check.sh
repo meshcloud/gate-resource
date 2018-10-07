@@ -39,6 +39,7 @@ it_can_check_from_a_ref() {
   
   local gate_ref1=$(make_commit_to_file $repo "my-gate/1")
   local gate_ref2=$(make_commit_to_file $repo "my-gate/2")
+  local non_gate_ref2=$(make_commit_to_file $repo "other-gate/1")
   local gate_ref3=$(make_commit_to_file $repo "my-gate/3")
 
   check_gate_at_ref $repo "my-gate" "$gate_ref2" | jq -e "

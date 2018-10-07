@@ -143,8 +143,13 @@ while true; do
       continue
     fi
 
-    result_item=$item
-    result_ref=$(git -C $repository rev-parse HEAD)
+    if [[ $item == *.autoclose ]]; then
+      result_item="none"
+      result_ref="none"
+    else
+      result_item=$item
+      result_ref=$(git -C $repository rev-parse HEAD)
+    fi
   elif [ ! -z "$update_autoclose" ]; then
     echo "processing update_autoclose..."
     

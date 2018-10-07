@@ -24,34 +24,52 @@ gate=$(jq -r '.source.gate // ""' < $payload)
 version=$(jq -r '.version' < $payload)
 version_ref=$(jq -r '.version.ref' < $payload)
 
-# extract git configuration and pass it to git resource
-git_source=$(cat "$payload" | jq -r .source.git)
-git_payload=$(echo '{
-    "source": '$git_source',
-    "version": '$version',
-    "params": {
-      "disable_git_lfs": true,
-      "submodules": "none"
-    }
-  }' | jq -r)
+if [ "$version_ref" == "none" ]; then 
+  echo "version.ref is none, nothing to do"
+  passed_item="none"
+else
+  # extract git configuration and pass it to git resource
+  git_source=$(cat "$payload" | jq -r .source.git)
+  git_payload=$(echo '{
+      "source": '$git_source',
+      "version": '$version',
+      "params": {
+        "disable_git_lfs": true,
+        "submodules": "none"
+      }
+    }' | jq -r)
 
-# forward to git-resource to let it fetch the repository
-echo "$git_payload" | /opt/git-resource/in $destination
+  # forward to git-resource to let it fetch the repository
+  echo "$git_payload" | /opt/git-resource/in $destination
 
-# ref is available, identify the value that passsed the gate
-# emit the item that passed gate based on the file changed in the commit fetched
-cd $destination
+  cd $destination
 
-passed_file=$(git diff-tree --no-commit-id --name-only -r "$version_ref" | grep "$gate")
-passed_item=$(basename $passed_file)
+  # ref is available, identify the value that passsed the gate
+  # emit the item that passed gate based on the file changed in the commit fetched
+
+  echo "finding passed file"
+
+  # note: if no file can be found that changed at this revision in the gate, assume it's "none"
+  # this is a workaround for emitting "empty" versions, e.g. when `out` did put a .autoclose file
+  # or an `out` invocation did not update any autoclose gates when it was invoked with `update_autoclose: true`
+  passed_file=$(git diff-tree --no-commit-id --name-only -r "$version_ref" | grep "$gate/" || true)
+  if [ -z "$passed_file" ]; then 
+    echo "could not determine passed file in version $version_ref"
+    exit 1
+  fi
+  passed_item=$(basename $passed_file)
+
+  # write two files, passed (item name) and metadata (item file)
+  if [ ! "$passed_file" == "none" ]; then 
+    echo "$passed_item" > passed
+    cp "$passed_file" metadata
+  fi
+fi
+
 gate_meta=$(jq -n "[
   { name: \"gate\", value: \"$gate\" },
   { name: \"passed\", value: \"$passed_item\" }
 ]")
-
-# write two files, passed (item name) and metadata (item file)
-echo "$passed_item" > passed
-cp "$passed_file" metadata
 
 jq -n "{
   version: $version,

@@ -142,7 +142,8 @@ make_commit_with_all_changes() {
 get_gate_at_ref() {
   local uri="$1"
   local ref="$2"
-  local destination="$3"
+  local gate="$3"
+  local destination="$4"
 
   jq -n "{
     source: {
