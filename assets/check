@@ -16,8 +16,9 @@ version=$(jq -r '.version // {}' < $payload)
 git_source=$(cat "$payload" | jq -r .source.git)
 git_payload=$(echo '{ "source": '$git_source', "version": '$version' }' | jq -r)
 
-# only watch the gate path
+# only watch the gate pathch
 git_payload=$(echo "$git_payload" | jq -r '.source.paths = ["'$gate'"]')
+git_payload=$(echo "$git_payload" | jq -r '.source.ignore_paths = ["'**.autoclose'"]')
 
 # forward to git-resource to let it do its checking
 echo "$git_payload" | /opt/git-resource/check "$@" >&3

@@ -34,6 +34,17 @@ it_can_check_empty_gate() {
   '
 }
 
+it_can_check_ignores_autoclose_items() {
+  local repo=$(init_repo)
+  
+  make_commit $repo
+  make_commit_to_file $repo "my-gate/1234.autoclose"
+
+  check_gate $repo "my-gate" | jq -e '
+    . == []
+  '
+}
+
 it_can_check_from_a_ref() {
   local repo=$(init_repo)
   
@@ -53,4 +64,5 @@ it_can_check_from_a_ref() {
 run it_can_check_from_head
 run it_can_check_empty_repo
 run it_can_check_empty_gate
+run it_can_check_ignores_autoclose_items
 run it_can_check_from_a_ref
