@@ -85,9 +85,9 @@ try_autoclose() {
     if [[ ! -e "$repository/$p" ]]; then
       echo "fail"
       passed=false
-      break;
+    else
+      echo "ok"
     fi;
-    echo "ok"
   done < "$item"
 
   if [ $passed = true ]; then 
