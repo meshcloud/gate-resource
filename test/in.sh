@@ -41,5 +41,31 @@ it_can_get_from_none_version_and_skip_output() {
   test ! -f $dest/metadata
 }
 
+
+it_can_get_from_autoclose_version() {
+  local repo=$(init_repo)
+  local dest=$TMPDIR/destination
+  local gate="autogate"
+  local item="1234"
+
+  mkdir -p $repo/$gate
+  echo "x" >> "$repo/$gate/$item.autoclose"
+  local intial_ref=$(make_commit_with_all_changes $repo)
+
+  mv "$repo/$gate/$item.autoclose" "$repo/$gate/$item"
+  local autoclose_ref=$(make_commit_with_all_changes $repo)
+
+  result=$(get_gate_at_ref "$repo" "$autoclose_ref" "$gate" "$dest")
+  echo "$result" | jq -e '
+    .version == { "ref": "'$autoclose_ref'" }
+    and (.metadata | .[] | select(.name == "gate") | .value == "'$gate'")
+    and (.metadata | .[] | select(.name == "passed") | .value == "'$item'")
+  '
+
+  test $(cat $dest/passed) = "$item"
+  test $(cat $dest/metadata) = "x"
+}
+
 run it_can_get_from_regular_version
 run it_can_get_from_none_version_and_skip_output
+run it_can_get_from_autoclose_version

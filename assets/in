@@ -52,7 +52,14 @@ else
   # note: if no file can be found that changed at this revision in the gate, assume it's "none"
   # this is a workaround for emitting "empty" versions, e.g. when `out` did put a .autoclose file
   # or an `out` invocation did not update any autoclose gates when it was invoked with `update_autoclose: true`
-  passed_file=$(git diff-tree --no-commit-id --name-only -r "$version_ref" | grep "$gate/" || true)
+  changed_files=$(git diff-tree --no-commit-id --name-only -r "$version_ref" | grep "$gate/" | grep -v ".autoclose" || true)
+  changed_files_count=$(echo $changed_files | wc -l)
+  if [ ! "$changed_files_count" == "1" ]; then
+    printf "could not determine exactly 1 file in version $version_ref. Changed files were:\\n$changed_files"
+    exit 1
+  fi
+  
+  passed_file=$changed_files
   if [ -z "$passed_file" ]; then 
     echo "could not determine passed file in version $version_ref"
     exit 1
