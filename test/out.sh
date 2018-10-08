@@ -122,6 +122,36 @@ update_autoclose_gate_with_empty_gate_returns_none() {
   '
 }
 
+update_autoclose_gate_ignores_metadata_after_hash() {
+  local gate="auto-gate"
+
+  local upstreamRepo=$(init_repo)
+  mkdir -p "$upstreamRepo/$gate"
+  echo "" >> "$upstreamRepo/$gate/1.autoclose"
+  echo "#" >> "$upstreamRepo/$gate/1.autoclose"
+  echo "some metadata" >> "$upstreamRepo/$gate/1.autoclose"
+  local head_ref=$(make_commit_with_all_changes $upstreamRepo)
+  
+  local src=$(mktemp -d $TMPDIR/put-src.XXXXXX)
+  local localRepo=$src/gate-repo
+  git clone $upstreamRepo $localRepo
+
+  upstream_repo_allow_push $upstreamRepo
+  result=$(put_gate_update_autoclose $upstreamRepo $src $gate)
+  
+  upstream_repo_allow_asserts $upstreamRepo
+  local pushed_ref="$(git -C $upstreamRepo rev-parse HEAD)"
+
+  # check no new commit was created
+  test ! $pushed_ref == $head_ref
+  # check output
+  echo "$result" | jq -e '
+    .version == { "ref": "'$pushed_ref'" }
+    and (.metadata | .[] | select(.name == "gate") | .value == "'$gate'")
+    and (.metadata | .[] | select(.name == "passed") | .value == "1")
+  '
+}
+
 update_autoclose_gate_with_closable_items_returns_first_closed() {
   local gate="auto-gate"
 
@@ -199,6 +229,7 @@ update_autoclose_gate_with_closable_items_retries_using_rebase_on_conflicts() {
 run it_can_put_item_to_simple_gate
 run it_can_put_autoclose_item_to_autoclose_gate
 run update_autoclose_gate_with_no_closable_items_returns_none
+run update_autoclose_gate_ignores_metadata_after_hash
 run update_autoclose_gate_with_empty_gate_returns_none
 run update_autoclose_gate_with_closable_items_returns_first_closed
 run update_autoclose_gate_with_closable_items_retries_using_rebase_on_conflicts

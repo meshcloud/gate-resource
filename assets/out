@@ -81,6 +81,11 @@ try_autoclose() {
   echo "----------------------"
   while IFS="" read -r p || [ -n "$p" ]
   do
+    # check if this is the beginning of metadata
+    if [[ "$p" == "#"* ]]; then
+      break
+    fi;
+
     echo -n "- testing $p: "
     if [[ ! -e "$repository/$p" ]]; then
       echo "fail"

@@ -34,14 +34,16 @@ Each folder in the repository represents a gate. Files in each gate-folder repre
 
 ### Auto-gates
 
-Auto-gates are gates that automatically close depending on items passing through other gates. An auto-gate contains `.autoclose` items, which is a simple text file that contains dependant items, one on each line. For example, `b.autoclose` depends on these two items passing through `my-gate`:
+Auto-gates are gates that automatically close depending on items passing through other gates. An auto-gate contains `.autoclose` items, which is a simple text file that contains dependant items, one on each line ("autoclose spec"). For example, `b.autoclose` depends on these two items passing through `my-gate`:
 
 ```b.autoclose
 my-gate/2
 my-gate/3
+# metadata after this line
+arbitrary content goes here
 ```
 
-When all dependant items passed, the autoclose item closes and drops the `.autoclose` extension from its filename.
+When all dependant items passed, the autoclose item closes and drops the `.autoclose` extension from its filename. Autoclose files can also contain additional metadata. To separate the autoclose spec from additional metadata, gate-resource looks for a line starting with `#` and stops interpreting any lines after this.
 
 #### The "none" version
 
