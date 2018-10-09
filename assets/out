@@ -70,14 +70,25 @@ commit() {
   fi
 }
 
+rev()
+{
+  local repository="$1"
+  { 
+      git -C "$repository" log --format='%H' --first-parent --reverse HEAD -- "$@"
+  } | tail -n 1
+}
+
 try_autoclose() {
   local repository="$1"
-  local item="$2"
+  local item_path="$2"
 
-  # we process all items as this helps debuggability
+  local gate="$(basename "$(dirname "$item_path")")"
+  local item="$(basename "$item_path")"
+
+  # we process all item_paths as this helps debuggability
   local passed=true
   echo ""
-  echo "try autoclose: $item"
+  echo "try autoclose: $gate/$item"
   echo "----------------------"
   while IFS="" read -r p || [ -n "$p" ]
   do
@@ -93,13 +104,13 @@ try_autoclose() {
     else
       echo "ok"
     fi;
-  done < "$item"
+  done < "$item_path"
 
   if [ $passed = true ]; then 
-    echo "=> autoclosing $item"
-    mv "$item" "${item//\.autoclose/}"
+    echo "=> autoclosing $gate/$item"
+    mv "$item_path" "${item_path//\.autoclose/}"
 
-    commit "$repository" "autoclosed $item"
+    commit "$repository" "autoclose: $gate/$item"
   fi
   echo "----------------------"
 }
@@ -136,30 +147,40 @@ while true; do
     # dervice item name, note that item_file may contain wildcards so it must be unquoted here
     item=$(basename $item_file)
 
-    # TODO: maybe we sould also handle the case that the file already exists here
-    # write gate status
-    mkdir -p "$repository/$gate"                 # ensure gate-directory exists
-    cp $item_file "$repository/$gate/$item"      # item_file should be interpolated, so we don't quote it
-
-    commit "$repository" "$item passed gate $gate"
-
-    if ! git -C $repository push; then
-      echo "pushing failed, retrying"
-      continue
-    fi
-
-    if [[ $item == *.autoclose ]]; then
-      result_item="none"
-      result_ref="none"
+    # check if the item already exists in the gate
+    # the item target is where the item will end up when it's passed
+    # for .autoclose items, this is the path without the .autoclose extension
+    item_target="$repository/$gate/${item%.*}"
+    if [ -f "$item_target" ]; then
+      echo "$item_target already exists, not committing a new item"
+      result_item=$(basename "$item_target")
+      result_ref="$(rev "$repository" "$item_target")" # find last revision that file changed
     else
-      result_item=$item
-      result_ref=$(git -C $repository rev-parse HEAD)
+      # write gate status
+      mkdir -p "$repository/$gate"                   # ensure gate-directory exists
+      cp $item_file "$repository/$gate/$item"      # item_file should be interpolated, so we don't quote it
+
+      commit "$repository" "put: $gate/$item"
+
+      if ! git -C "$repository" push; then
+        echo "pushing failed, retrying"
+        continue
+      fi
+
+      if [[ $item == *.autoclose ]]; then
+        result_item="none"
+        result_ref="none"
+      else
+        result_item=$item
+        result_ref=$(git -C "$repository" rev-parse HEAD)
+      fi
     fi
+
   elif [ ! -z "$update_autoclose" ]; then
     echo "processing update_autoclose..."
     
-    for item in $repository/$gate/*.autoclose; do
-      try_autoclose $repository $item
+    for item_path in $repository/$gate/*.autoclose; do
+      try_autoclose $repository $item_path
     done
 
     # we may have closed multiple gates at once. However, it's important

@@ -76,7 +76,7 @@ Outputs 2 files:
 
 ### `out`: Pass an item through a gate
 
-Performs one of the following actions to change the state of the pool.
+Performs one of the following actions to change the state of a gate.
 
 #### Parameters
 
@@ -84,6 +84,8 @@ One of the following is required.
 
 * `item_file`: Path to a file containing an item to pass through the gate. Wildcards are allowed, but should match only a single item. This file may also be a `.autogate` file.
 * `update_autoclose`: Process pending autoclose items in the repository
+
+> Note: when putting a new gate item or `.autoclose` spec, the resource checks if a matching item already passed the gate. When this is the case, `out` will emit the version that previously produced this item. This enables gate puts to be idempotent.
 
 ## Development
 

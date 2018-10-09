@@ -36,6 +36,28 @@ it_can_put_item_to_simple_gate() {
   test -e "$upstreamRepo/$gate/$item"
 }
 
+it_can_put_existing_item_to_simple_gate_returns_existing_ref() {
+  local repo=$(init_repo)
+  local src=$TMPDIR/src
+  local gate="my-gate"
+  local item="1234"
+
+  local existing_ref=$(make_commit_to_file $repo "$gate/$item")
+
+  local item_file="gating-task/*"
+  mkdir -p "$src/gating-task"
+  echo "arbitrary contents" > "$src/gating-task/$item"
+
+  result=$(put_gate_item_file $repo $src $gate $item_file)
+
+  # check output points to existing ref
+  echo "$result" | jq -e '
+    .version == { "ref": "'$existing_ref'" }
+    and (.metadata | .[] | select(.name == "gate") | .value == "'$gate'")
+    and (.metadata | .[] | select(.name == "passed") | .value == "'$item'")
+  '
+}
+
 it_can_put_autoclose_item_to_autoclose_gate() {
   local upstreamRepo=$(init_repo)
   local initial_ref=$(make_commit $upstreamRepo)
@@ -66,6 +88,29 @@ it_can_put_autoclose_item_to_autoclose_gate() {
   '
   # check that the gate file was written
   test -e "$upstreamRepo/$gate/$item"
+}
+
+it_can_put_existing_item_to_autoclose_gate_returns_existing_ref() {
+  local repo=$(init_repo)
+  local src=$TMPDIR/src
+  local gate="my-gate"
+  local item="1234"
+
+  # there already exists a passed item for which we want to emit an autoclose spec
+  local existing_ref=$(make_commit_to_file $repo "$gate/$item")
+
+  local item_file="gating-task/*"
+  mkdir -p "$src/gating-task"
+  echo "arbitrary contents" > "$src/gating-task/$item.autoclose"
+
+  result=$(put_gate_item_file $repo $src $gate $item_file)
+
+  # check output points to existing ref
+  echo "$result" | jq -e '
+    .version == { "ref": "'$existing_ref'" }
+    and (.metadata | .[] | select(.name == "gate") | .value == "'$gate'")
+    and (.metadata | .[] | select(.name == "passed") | .value == "'$item'")
+  '
 }
 
 update_autoclose_gate_with_no_closable_items_returns_none() {
@@ -227,7 +272,9 @@ update_autoclose_gate_with_closable_items_retries_using_rebase_on_conflicts() {
 }
 
 run it_can_put_item_to_simple_gate
+run it_can_put_existing_item_to_simple_gate_returns_existing_ref
 run it_can_put_autoclose_item_to_autoclose_gate
+run it_can_put_existing_item_to_autoclose_gate_returns_existing_ref
 run update_autoclose_gate_with_no_closable_items_returns_none
 run update_autoclose_gate_ignores_metadata_after_hash
 run update_autoclose_gate_with_empty_gate_returns_none
