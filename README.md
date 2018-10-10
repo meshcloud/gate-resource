@@ -85,7 +85,17 @@ One of the following is required.
 * `item_file`: Path to a file containing an item to pass through the gate. Wildcards are allowed, but should match only a single item. This file may also be a `.autogate` file.
 * `update_autoclose`: Process pending autoclose items in the repository
 
-> Note: when putting a new gate item or `.autoclose` spec, the resource checks if a matching item already passed the gate. When this is the case, `out` will emit the version that previously produced this item. This enables gate puts to be idempotent.
+> Note: Gate puts are idempotent. When putting a new gate item or `.autoclose` spec, the resource checks if a matching item already passed the gate. When this is the case, `out` will emit the version that previously produced this item.
+
+#### Creating .autoclose items
+
+`.autoclose` items can be put to the gate just like regular items. However, the version that gate-resource will emmit for this item may vary:
+
+* when a matching target item (i.e. the filename without `.autoclose` extension) already
+  exists, emits the version that produced this target item.
+* when the `.autoclose` item is immediately closable (all dependent items alreday passed
+  their gates), close the item and emit the version
+* otherwise emit a `none` version (see above)
 
 ## Development
 

@@ -93,6 +93,46 @@ it_can_put_autoclose_item_to_autoclose_gate() {
   test -e "$upstreamRepo/$gate/$item"
 }
 
+it_can_put_autoclose_item_that_is_closable_to_autoclose_gate() {
+  local upstreamRepo=$(init_repo)
+  local simple_gate="simple-gate"
+  local simple_item="1"
+  local simple_ref=$(make_commit_to_file "$upstreamRepo" "$simple_gate/$simple_item")
+
+  upstream_repo_allow_push $upstreamRepo
+
+  local src=$(mktemp -d "$TMPDIR/put-src.XXXXXX")
+  local localRepo=$src/gate-repo
+  git clone "$upstreamRepo" "$localRepo"
+
+  local gate="auto-gate"
+  local item_file="gating-task/*.autoclose"
+  local closed_item="1234"
+  local closable_item="$closed_item.autoclose"
+  mkdir -p "$src/gating-task"
+  echo "$simple_gate/$simple_item" >> "$src/gating-task/$closable_item"
+
+  result=$(put_gate_item_file $upstreamRepo $src $gate $item_file)
+
+  git -C $upstreamRepo checkout master
+  local closable_ref="$(git -C $upstreamRepo rev-parse HEAD~1)"
+  local closed_ref="$(git -C $upstreamRepo rev-parse HEAD)"
+
+  set -x
+  # checknew commits were created
+  test ! "$closable_ref" == "$simple_ref"
+  test ! "$closed_ref" == "$closable_ref"
+
+  # check output
+  echo "$result" | jq -e '
+    .version == { "ref": "'$closed_ref'" }
+    and (.metadata | .[] | select(.name == "gate") | .value == "'$gate'")
+    and (.metadata | .[] | select(.name == "passed") | .value == "'$closed_item'")
+  '
+  # check that the gate file was written
+  test -e "$upstreamRepo/$gate/$closed_item"
+}
+
 it_can_put_existing_item_to_autoclose_gate_returns_existing_ref() {
   local repo=$(init_repo)
   local src=$TMPDIR/src
@@ -280,6 +320,7 @@ update_autoclose_gate_with_closable_items_retries_using_rebase_on_conflicts() {
 run it_can_put_item_to_simple_gate
 run it_can_put_existing_item_to_simple_gate_returns_existing_ref
 run it_can_put_autoclose_item_to_autoclose_gate
+run it_can_put_autoclose_item_that_is_closable_to_autoclose_gate
 run it_can_put_existing_item_to_autoclose_gate_returns_existing_ref
 run update_autoclose_gate_with_no_closable_items_returns_none
 run update_autoclose_gate_ignores_metadata_after_hash

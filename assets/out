@@ -47,6 +47,8 @@ git_config_payload=$(jq -r '.source.git.git_config // []' < $payload)
 
 configure_git_global "${git_config_payload}"
 
+dashed_line="----------------------"
+
 if [ -z "$uri" ]; then
   echo "invalid payload (missing uri):" >&2
   cat $payload >&2
@@ -79,16 +81,18 @@ rev() {
 
 try_autoclose() {
   local repository="$1"
-  local item_path="$2"
+  local gate="$2"
+  local item="$3"
 
-  local gate="$(basename "$(dirname "$item_path")")"
-  local item="$(basename "$item_path")"
-
+  local item_path="$repository/$gate/$item"
   # we process all item_paths as this helps debuggability
   local passed=true
   echo ""
   echo "try autoclose: $gate/$item"
-  echo "----------------------"
+
+  ls -la $repository/*
+
+  echo "$dashed_line"
   while IFS="" read -r p || [ -n "$p" ]
   do
     # check if this is the beginning of metadata
@@ -111,7 +115,7 @@ try_autoclose() {
 
     commit "$repository" "put: $gate/$item (via autoclose)"
   fi
-  echo "----------------------"
+  echo "$dashed_line"
 }
 
 repository=$(mktemp -d "$TMPDIR/gate-resource-repo.XXXXXX")
@@ -141,9 +145,8 @@ while true; do
   result_ref=""
 
   if [ ! -z "$item_file" ]; then
-    echo "processing item_file..."
-
-    # dervice item name, note that item_file may contain wildcards so it must be unquoted here
+    #  note that item_file may contain wildcards so it must be unquoted here
+    echo "processing item_file:" $item_file
     item=$(basename $item_file)
 
     # check if the item already exists in the gate
@@ -155,31 +158,53 @@ while true; do
       result_item=$(basename "$item_target")
       result_ref="$(rev "$repository" "$item_target")" # find last revision that file changed
     else
-      # write gate status
+      # write and commit gate gate
       mkdir -p "$repository/$gate"                   # ensure gate-directory exists
-      cp $item_file "$repository/$gate/$item"      # item_file should be interpolated, so we don't quote it
+      cp $item_file "$repository/$gate/$item"        # item_file should be interpolated, so we don't quote it
+
+      echo ""
+      echo "wrote $gate/$item with contents:"
+      echo "$dashed_line"
+      cat "$repository/$gate/$item"
+      echo "$dashed_line"
 
       commit "$repository" "put: $gate/$item"
 
+      if [[ ! $item == *.autoclose ]]; then
+        # it's not an autoclose item, emit the current revision
+        result_item=$(basename "$item_target")
+        result_ref=$(git -C "$repository" rev-parse HEAD)
+      else
+        # it's an autoclose item, try to close it immediately
+        try_autoclose "$repository" "$gate" "$item"
+
+        # check if the autoclose was successful, i.e. the item_target now exists
+        if [ -f "$repository/$item_target" ]; then
+          # it was closed, emit the closed revision
+          result_item=$(basename "$item_target")
+          result_ref=$(git -C "$repository" rev-parse HEAD)
+        else
+          # it was not closed, emit dummy revision
+          result_item="none"
+          result_ref="none"
+        fi
+        
+      fi
+
+      # push all commits that were made
       if ! git -C "$repository" push; then
         echo "pushing failed, retrying"
         continue
       fi
 
-      if [[ $item == *.autoclose ]]; then
-        result_item="none"
-        result_ref="none"
-      else
-        result_item=$item
-        result_ref=$(git -C "$repository" rev-parse HEAD)
-      fi
     fi
 
   elif [ ! -z "$update_autoclose" ]; then
     echo "processing update_autoclose..."
     
     for item_path in $repository/$gate/*.autoclose; do
-      try_autoclose "$repository" "$item_path"
+      item=$(basename "$item_path")
+      try_autoclose "$repository" "$gate" "$item"
     done
 
     # we may have closed multiple gates at once. However, it's important
@@ -199,13 +224,13 @@ while true; do
       echo "some autoclose items were closed, emitting the first one (remaining will be found by next resource check)"
       passed_file=$(git -C "$repository" diff-tree --no-commit-id --name-only -r "$first_gate_ref" | grep "$gate")
       
+      result_item=$(basename $passed_file)
+      result_ref=$first_gate_ref
+
       if ! git -C $repository push; then
         echo "pushing failed, retrying"
         continue
       fi
-
-      result_item=$(basename $passed_file)
-      result_ref=$first_gate_ref
     fi
   else
     echo "invalid out parameters, neither update_autoclose or item_file specified"
