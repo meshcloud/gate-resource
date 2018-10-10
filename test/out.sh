@@ -41,15 +41,18 @@ it_can_put_existing_item_to_simple_gate_returns_existing_ref() {
   local src=$TMPDIR/src
   local gate="my-gate"
   local item="1234"
+  local other_item="abcd"
 
   local existing_ref=$(make_commit_to_file $repo "$gate/$item")
-
+  local other_ref=$(make_commit_to_file $repo "$gate/$other_item")
+  
   local item_file="gating-task/*"
   mkdir -p "$src/gating-task"
   echo "arbitrary contents" > "$src/gating-task/$item"
 
   result=$(put_gate_item_file $repo $src $gate $item_file)
 
+  test ! $existing_ref == $other_ref
   # check output points to existing ref
   echo "$result" | jq -e '
     .version == { "ref": "'$existing_ref'" }
@@ -95,9 +98,11 @@ it_can_put_existing_item_to_autoclose_gate_returns_existing_ref() {
   local src=$TMPDIR/src
   local gate="my-gate"
   local item="1234"
+  local other_item="abcd"
 
   # there already exists a passed item for which we want to emit an autoclose spec
   local existing_ref=$(make_commit_to_file $repo "$gate/$item")
+  local other_ref=$(make_commit_to_file $repo "$gate/$other_item")
 
   local item_file="gating-task/*"
   mkdir -p "$src/gating-task"
@@ -105,6 +110,7 @@ it_can_put_existing_item_to_autoclose_gate_returns_existing_ref() {
 
   result=$(put_gate_item_file $repo $src $gate $item_file)
 
+  test ! "$existing_ref" == "$other_ref"
   # check output points to existing ref
   echo "$result" | jq -e '
     .version == { "ref": "'$existing_ref'" }

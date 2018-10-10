@@ -70,12 +70,11 @@ commit() {
   fi
 }
 
-rev()
-{
+rev() {
   local repository="$1"
-  { 
-      git -C "$repository" log --format='%H' --first-parent --reverse HEAD -- "$@"
-  } | tail -n 1
+  local files="$2"
+  
+  git -C "$repository" log --format='%H' --first-parent --reverse HEAD -- "$files" | tail -n 1
 }
 
 try_autoclose() {
@@ -110,7 +109,7 @@ try_autoclose() {
     echo "=> autoclosing $gate/$item"
     mv "$item_path" "${item_path//\.autoclose/}"
 
-    commit "$repository" "autoclose: $gate/$item"
+    commit "$repository" "put: $gate/$item (via autoclose)"
   fi
   echo "----------------------"
 }
@@ -150,8 +149,8 @@ while true; do
     # check if the item already exists in the gate
     # the item target is where the item will end up when it's passed
     # for .autoclose items, this is the path without the .autoclose extension
-    item_target="$repository/$gate/${item%.*}"
-    if [ -f "$item_target" ]; then
+    item_target="$gate/${item%.*}"
+    if [ -f "$repository/$item_target" ]; then
       echo "$item_target already exists, not committing a new item"
       result_item=$(basename "$item_target")
       result_ref="$(rev "$repository" "$item_target")" # find last revision that file changed
@@ -180,7 +179,7 @@ while true; do
     echo "processing update_autoclose..."
     
     for item_path in $repository/$gate/*.autoclose; do
-      try_autoclose $repository $item_path
+      try_autoclose "$repository" "$item_path"
     done
 
     # we may have closed multiple gates at once. However, it's important
