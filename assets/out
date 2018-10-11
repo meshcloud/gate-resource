@@ -90,8 +90,6 @@ try_autoclose() {
   echo ""
   echo "try autoclose: $gate/$item"
 
-  ls -la $repository/*
-
   echo "$dashed_line"
   while IFS="" read -r p || [ -n "$p" ]
   do
