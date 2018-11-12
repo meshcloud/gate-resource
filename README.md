@@ -1,5 +1,8 @@
 # gate-resource
 
+[![Build Status](https://img.shields.io/docker/build/meshcloud/gate-resource.svg)](https://hub.docker.com/r/meshcloud/gate-resource/)
+[![Docker Pulls](https://img.shields.io/docker/pulls/meshcloud/gate-resource.svg?maxAge=2592000)](https://hub.docker.com/r/meshcloud/gate-resource/)
+
 A generic gate resource for Concourse CI.
 
 Allows you to model quality gates and pipeline control flow.
