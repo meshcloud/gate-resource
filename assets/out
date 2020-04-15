@@ -116,11 +116,13 @@ try_autoclose() {
   echo "$dashed_line"
 }
 
+# clone the repository. by default we only need a single branch and a single 
 repository=$(mktemp -d "$TMPDIR/gate-resource-repo.XXXXXX")
-git clone --single-branch $uri --branch $branch $repository
+git clone $uri --branch $branch $repository --depth=1
 
 # FOR TEST ONLY: simulate out of date repository
 if [ ! -z $simulate_rebase ]; then
+  git -C $repository fetch --deepen=1 # fetch the previous commit so we can go back to it
   echo $(git -C $repository rev-parse HEAD~1) > $repository/.git/refs/remotes/origin/$branch
   git -C $repository reset --hard HEAD~1
 fi
@@ -136,7 +138,7 @@ while true; do
   # rollback any commits that we may have made in a failed previous iteration of the loop
   git -C $repository reset --hard origin/$branch
   git -C $repository clean --force --force -d # make sure we start with a clean slate
-  git -C $repository pull origin $branch
+  git -C $repository pull origin $branch # this should only pull new commits
 
   # reset state
   result_item=""
@@ -154,6 +156,10 @@ while true; do
     # check if the item already exists in the gate
     if [ -f "$repository/$item_target" ]; then
       echo "$item_target already exists, not committing a new item"
+      
+      #we need to unshallow the repository to find the existing commit, otherwise rev() can't find the correct commit
+      git -C $repository fetch --unshallow
+
       result_item=$(basename "$item_target")
       result_ref="$(rev "$repository" "$item_target")" # find last revision that file changed
     else

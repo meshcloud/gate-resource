@@ -61,7 +61,7 @@ check_gate() {
   jq -n "{
     source: {
       git: {
-        uri: $(echo $repo | jq -R .)
+        uri: $(echo file://$repo | jq -R .)
       },
       gate: $(echo $gate | jq -R .)
     }
@@ -140,7 +140,7 @@ make_commit_with_all_changes() {
 }
 
 get_gate_at_ref() {
-  local uri="$1"
+  local uriPath="$1"
   local ref="$2"
   local gate="$3"
   local destination="$4"
@@ -148,7 +148,7 @@ get_gate_at_ref() {
   jq -n "{
     source: {
       git: {
-        uri: $(echo $uri | jq -R .)
+        uri: $(echo file://$uriPath | jq -R .)
       },
       gate: $(echo $gate | jq -R .)
     },
@@ -159,7 +159,7 @@ get_gate_at_ref() {
 }
 
 put_gate_item_file() {
-  local uri="$1"
+  local uriPath="$1"
   local source="$2"
   local gate="$3"
   local item_file="$4"
@@ -167,7 +167,7 @@ put_gate_item_file() {
   jq -n "{
     source: {
       git: {
-        uri: $(echo $uri | jq -R .),
+        uri: $(echo file://$uriPath | jq -R .),
         branch: \"master\"
       },
       gate: $(echo $gate | jq -R .)
@@ -179,14 +179,14 @@ put_gate_item_file() {
 }
 
 put_gate_update_autoclose() {
-  local uri="$1"
+  local uriPath="$1"
   local source="$2"
   local gate="$3"
 
   jq -n "{
     source: {
       git: {
-        uri: $(echo $uri | jq -R .),
+        uri: $(echo file://$uriPath | jq -R .),
         branch: \"master\"
       },
       gate: $(echo $gate | jq -R .)
@@ -198,14 +198,14 @@ put_gate_update_autoclose() {
 }
 
 put_gate_update_autoclose_rebase() {
-  local uri="$1"
+  local uriPath="$1"
   local source="$2"
   local gate="$3"
 
   jq -n "{
     source: {
       git: {
-        uri: $(echo $uri | jq -R .),
+        uri: $(echo file://$uriPath | jq -R .),
         branch: \"master\"
       },
       gate: $(echo $gate | jq -R .)

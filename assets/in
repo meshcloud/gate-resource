@@ -29,13 +29,15 @@ if [ "$version_ref" == "none" ]; then
   passed_item="none"
 else
   # extract git configuration and pass it to git resource
+  # we need to fetch with --depth=2 so we can use git diff-tree to diff to the previous commit
   git_source=$(cat "$payload" | jq -r .source.git)
   git_payload=$(echo '{
       "source": '$git_source',
       "version": '$version',
       "params": {
         "disable_git_lfs": true,
-        "submodules": "none"
+        "submodules": "none",
+        "depth": 2
       }
     }' | jq -r)
 
@@ -53,6 +55,7 @@ else
   # this is a workaround for emitting "empty" versions, e.g. when `out` did put a .autoclose file
   # or an `out` invocation did not update any autoclose gates when it was invoked with `update_autoclose: true`
   changed_files=$(git diff-tree --no-commit-id --diff-filter=d --name-only -r "$version_ref" | grep "$gate/" | grep -v ".autoclose" || true)
+  
   changed_files_count=$(echo $changed_files | wc -l)
   if [ ! "$changed_files_count" == "1" ]; then
     printf "could not determine exactly 1 file in version %s $version_ref. Changed files were:\\n%s" "$version_ref" "$changed_files"

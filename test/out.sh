@@ -274,7 +274,6 @@ update_autoclose_gate_with_closable_items_returns_first_closed() {
   '
 }
 
-
 update_autoclose_gate_with_closable_items_retries_using_rebase_on_conflicts() {
   local gate="auto-gate"
 
