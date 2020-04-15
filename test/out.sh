@@ -118,7 +118,6 @@ it_can_put_autoclose_item_that_is_closable_to_autoclose_gate() {
   local closable_ref="$(git -C $upstreamRepo rev-parse HEAD~1)"
   local closed_ref="$(git -C $upstreamRepo rev-parse HEAD)"
 
-  set -x
   # checknew commits were created
   test ! "$closable_ref" == "$simple_ref"
   test ! "$closed_ref" == "$closable_ref"
