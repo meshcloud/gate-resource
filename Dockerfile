@@ -1,4 +1,4 @@
-FROM concourse/git-resource as resource
+FROM concourse/git-resource:1.7.0 as resource
 
 RUN mv /opt/resource /opt/git-resource
 

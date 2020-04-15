@@ -1,12 +1,15 @@
 user=meshcloud
 name=gate-resource
+image=$(user)/$(name)
+tag=1.1.0
 
 docker=docker
-tag = $(user)/$(name)
 dockerfile = Dockerfile
 
-push: build
-	$(docker) push $(user)/$(name)
-
 build:
-	$(docker) build -t $(tag) -f $(dockerfile) .
+	$(docker) build -t $(image):$(tag) -f $(dockerfile) .
+
+push: build
+	$(docker) push $(image):$(tag)
+	$(docker) tag $(image):$(tag) $(image):latest
+	$(docker) push $(image):latest
