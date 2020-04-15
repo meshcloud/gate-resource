@@ -56,9 +56,9 @@ Since concourse detects that the `none` version already exists after the first t
 
 ## Source Configuration
 
-* `git`: *Required.* Configuration of the repository. See [git-resource](https://github.com/concourse/git-resource) for options.
-  * **note:** the `paths` and `ignore_path` parameters are not supported
-
+* `git`: *Required.* Configuration of the repository. Supports the following subset of [git-resource](https://github.com/concourse/git-resource) configuration options (review the link for descriptions)
+  * *Required*: `uri`, `branch`, `private_key`
+  * *Optional*: `git_config`, `short_ref_format`,
 * `gate`: *Optional.* The gate to track.
 
 ## Behavior
@@ -76,6 +76,9 @@ Outputs 2 files:
 * `passed`: Contains the name of the item that passed the gate
 * `metadata`: Contains the contents of whatever was in your gate item. This is
   useful for environment configuration settings or documenting approval workflows.
+
+> note: the git repository cloned during `in` is a shallow clone and does not track an upstream branch.
+> This is not a problem when using the `out` step to create or update gates.
 
 ### `out`: Pass an item through a gate
 

@@ -35,14 +35,12 @@ else
       "source": '$git_source',
       "version": '$version',
       "params": {
-        "disable_git_lfs": true,
-        "submodules": "none",
         "depth": 2
       }
     }' | jq -r)
 
   # forward to git-resource to let it fetch the repository
-  echo "$git_payload" | /opt/git-resource/in $destination
+  echo "$git_payload" | /opt/resource/git-in $destination
 
   cd $destination
 

@@ -1,0 +1,95 @@
+#!/bin/bash
+# vim: set ft=sh
+
+set -e
+
+exec 3>&1 # make stdout available as fd 3 for the result
+exec 1>&2 # redirect all output to stderr for logging
+
+source /opt/git-resource/common.sh
+
+destination=$1
+
+if [ -z "$destination" ]; then
+  echo "usage: $0 <path/to/destination>" >&2
+  exit 1
+fi
+
+# for jq
+PATH=/usr/local/bin:$PATH
+
+bin_dir="${0%/*}"
+if [ "${bin_dir#/}" == "$bin_dir" ]; then
+  bin_dir="$PWD/$bin_dir"
+fi
+
+payload=$(mktemp $TMPDIR/git-resource-request.XXXXXX)
+
+cat > $payload <&0
+
+load_pubkey $payload
+configure_https_tunnel $payload
+configure_git_ssl_verification $payload
+configure_credentials $payload
+
+uri=$(jq -r '.source.uri // ""' < $payload)
+git_config_payload=$(jq -r '.source.git_config // []' < $payload)
+ref=$(jq -r '.version.ref // "HEAD"' < $payload)
+depth=$(jq -r '(.params.depth // 0)' < $payload)
+short_ref_format=$(jq -r '(.params.short_ref_format // "%s")' < $payload)
+
+configure_git_global "${git_config_payload}"
+
+if [ -z "$uri" ]; then
+  echo "invalid payload (missing uri):" >&2
+  cat $payload >&2
+  exit 1
+fi
+
+depthflag=""
+if test "$depth" -gt 0 2> /dev/null; then
+  depthflag="--depth $depth"
+fi
+
+git init $destination
+cd $destination
+
+git remote add origin $uri
+git fetch origin "$ref" $depthflag
+
+# this will set  master to the current commit 
+git reset --hard FETCH_HEAD
+
+git log -1 --oneline
+git clean --force --force -d
+
+if [ "$ref" == "HEAD" ]; then
+  return_ref=$(git rev-parse HEAD)
+else
+  return_ref=$ref
+fi
+
+# Store committer email in .git/committer. Can be used to send email to last committer on failed build
+# Using https://github.com/mdomke/concourse-email-resource for example
+git --no-pager log -1 --pretty=format:"%ae" > .git/committer
+
+# Store git-resource returned version ref .git/ref. Useful to know concourse
+# pulled ref in following tasks and resources.
+echo "${return_ref}" > .git/ref
+
+# Store short ref with templating. Useful to build Docker images with
+# a custom tag
+echo "${return_ref}" | cut -c1-7 | awk "{ printf \"${short_ref_format}\", \$1 }" > .git/short_ref
+
+# Store commit message in .git/commit_message. Can be used to inform about
+# the content of a successfull build.
+# Using https://github.com/cloudfoundry-community/slack-notification-resource
+# for example
+git log -1 --format=format:%B > .git/commit_message
+
+metadata=$(git_metadata)
+
+jq -n "{
+  version: {ref: $(echo $return_ref | jq -R .)},
+  metadata: $metadata
+}" >&3

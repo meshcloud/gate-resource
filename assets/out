@@ -30,7 +30,6 @@ jq -n "{
 }" > $git_source_payload
 
 load_pubkey $git_source_payload
-load_git_crypt_key $git_source_payload
 configure_https_tunnel $git_source_payload
 configure_git_ssl_verification $git_source_payload
 configure_credentials $git_source_payload
@@ -116,7 +115,8 @@ try_autoclose() {
   echo "$dashed_line"
 }
 
-# clone the repository. by default we only need a single branch and a single 
+# clone the repository at its current latest commit - we want to make more commits on top.
+# by default we only need to fetch a single branch and the latest commit
 repository=$(mktemp -d "$TMPDIR/gate-resource-repo.XXXXXX")
 git clone $uri --branch $branch $repository --depth=1
 

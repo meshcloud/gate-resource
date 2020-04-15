@@ -148,7 +148,8 @@ get_gate_at_ref() {
   jq -n "{
     source: {
       git: {
-        uri: $(echo file://$uriPath | jq -R .)
+        uri: $(echo file://$uriPath | jq -R .),
+        branch: \"master\"
       },
       gate: $(echo $gate | jq -R .)
     },

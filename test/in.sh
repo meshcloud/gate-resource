@@ -12,6 +12,10 @@ it_can_get_from_regular_version() {
 
   local gate_ref=$(make_commit_to_file $repo "$gate/$item")
 
+  echo "xxxx"
+  git -C "$repo" branch -a 
+  echo "xxxx"
+  
   result=$(get_gate_at_ref "$repo" "$gate_ref" "$gate" "$dest")
   echo "$result" | jq -e '
     .version == { "ref": "'$gate_ref'" }
