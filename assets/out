@@ -147,10 +147,11 @@ while true; do
     echo "processing item_file:" $item_file
     item=$(basename $item_file)
 
-    # check if the item already exists in the gate
     # the item target is where the item will end up when it's passed
     # for .autoclose items, this is the path without the .autoclose extension
     item_target="$gate/${item%.*}"
+    
+    # check if the item already exists in the gate
     if [ -f "$repository/$item_target" ]; then
       echo "$item_target already exists, not committing a new item"
       result_item=$(basename "$item_target")
