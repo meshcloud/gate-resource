@@ -1,7 +1,7 @@
 user=meshcloud
 name=gate-resource
 image=$(user)/$(name)
-tag=2.0.0-beta1
+tag=2.0.0
 
 docker=docker
 dockerfile = Dockerfile
