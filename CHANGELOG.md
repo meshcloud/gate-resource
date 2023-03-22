@@ -1,7 +1,8 @@
 # Release Notes
 ## 2.0.0
 
-- no changes on the code itself. We move the publishment from dockehub to ghcr.
+- no changes on the code itself. We now publish the container on ghcr instead of docker hub. 
+- We move out of beta, we've been running 2.0 without changes in production
 
 ## 2.0.0-beta1
 
