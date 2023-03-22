@@ -1,6 +1,6 @@
 # gate-resource
 
-[![CI](https://github.com/meshcloud/gate-resource/workflows/Build/badge.svg?branch=master&event=push)](https://github.com/meshcloud/gate-resource/actions?query=workflow%3ABuild)
+[![CI](https://github.com/meshcloud/gate-resource/workflows/release.yml/badge.svg?branch=master&event=push)](https://github.com/meshcloud/gate-resource/actions/workflows/main.yml/badge.svg)
 
 A generic gate resource for Concourse CI.
 
