@@ -1,5 +1,7 @@
 # gate-resource
 
+[![CI](https://github.com/meshcloud/gate-resource/workflows/Build/badge.svg?branch=master&event=push)](https://github.com/meshcloud/gate-resource/actions?query=workflow%3ABuild)
+
 A generic gate resource for Concourse CI.
 
 Allows you to model quality gates and pipeline control flow.
