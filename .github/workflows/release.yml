@@ -1,3 +1,5 @@
+name: Build
+
 # Workflow trigger Event
 on:
   push:
