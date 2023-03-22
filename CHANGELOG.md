@@ -1,7 +1,7 @@
 # Release Notes
 ## 2.0.0
 
-- no changes on the code itself. We move the publishment from dockehub to ghcr..
+- no changes on the code itself. We move the publishment from dockehub to ghcr.
 
 ## 2.0.0-beta1
 
