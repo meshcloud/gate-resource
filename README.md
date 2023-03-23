@@ -1,13 +1,14 @@
 # gate-resource
 
-[![Build Status](https://img.shields.io/docker/build/meshcloud/gate-resource.svg)](https://hub.docker.com/r/meshcloud/gate-resource/)
-[![Docker Pulls](https://img.shields.io/docker/pulls/meshcloud/gate-resource.svg?maxAge=2592000)](https://hub.docker.com/r/meshcloud/gate-resource/)
+[![Build](https://github.com/meshcloud/gate-resource/actions/workflows/release.yml/badge.svg)](https://github.com/meshcloud/gate-resource/actions/workflows/release.yml)
 
 A generic gate resource for Concourse CI.
 
 Allows you to model quality gates and pipeline control flow.
 
 This resource is backed by a Git repository and wraps [git-resource](https://github.com/concourse/git-resource).
+
+A public container build of this repo is available at ghcr.io [meshcloud/gate-resource](https://github.com/meshcloud/gate-resource/pkgs/container/gate-resource).
 
 > Contributors Welcome: This resource is new and hot off the press. We welcome your feedback and contributions!
 
